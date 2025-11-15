@@ -1,38 +1,45 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getUserRoleClient } from '@/lib/roles/client';
 import { getCurrentUser, signInWithGitHub, signOut } from '@/lib/supabase/auth';
 import type { User } from '@supabase/supabase-js';
 
 export default function GitHubSignIn() {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, right: 0 });
 
   useEffect(() => {
-    checkUser();
+    let mounted = true;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-      
+    async function init() {
+      const current = await getCurrentUser();
+      if (!mounted) return;
+      setUser(current);
+      if (current) setRole(await getUserRoleClient());
+      else setRole(null);
+    }
+    init();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const nextUser = session?.user ?? null;
+      setUser(nextUser);
+      if (nextUser) setRole(await getUserRoleClient());
+      else setRole(null);
+
       window.dispatchEvent(new CustomEvent('openkpis-auth-change', {
-        detail: { user: session?.user ?? null }
+        detail: { user: nextUser }
       }));
     });
 
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
-      }
-    };
-
-    const handleScroll = () => {
-      if (dropdownOpen) {
+    const handleDocumentClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!dropdownRef.current?.contains(target)) {
         setDropdownOpen(false);
       }
     };
@@ -47,350 +54,149 @@ export default function GitHubSignIn() {
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('scroll', handleScroll, true);
+    document.addEventListener('click', handleDocumentClick);
     window.addEventListener('resize', handleResize);
 
     return () => {
       subscription.unsubscribe();
-      document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('scroll', handleScroll, true);
+      document.removeEventListener('click', handleDocumentClick);
       window.removeEventListener('resize', handleResize);
+      mounted = false;
     };
   }, [dropdownOpen]);
 
-  async function checkUser() {
-    setLoading(true);
-    const currentUser = await getCurrentUser();
-    setUser(currentUser);
-    setLoading(false);
+  function toggleDropdown() {
+    if (!dropdownOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + window.scrollY + 8,
+        right: window.innerWidth - rect.right + window.scrollX,
+      });
+    }
+    setDropdownOpen(!dropdownOpen);
   }
 
   async function handleSignIn(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    
-    setLoading(true);
-    const { error } = await signInWithGitHub();
-    
-    if (error) {
-      console.error('Sign in error:', error);
-      alert('Failed to sign in. Please try again.');
-      setLoading(false);
-    }
+    await signInWithGitHub();
   }
 
   async function handleSignOut(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    
-    setLoading(true);
-    const { error } = await signOut();
-    
-    if (error) {
-      console.error('Sign out error:', error);
-      alert('Failed to sign out. Please try again.');
+    try {
+      const { error } = await signOut();
+      if (error) {
+        console.error('Sign out error:', error);
+        alert('Failed to sign out. Please try again.');
+      }
+    } finally {
+      // Best-effort local cleanup
+      try {
+        // clear supabase local storage tokens
+        const toRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i) || '';
+          if (k.startsWith('sb-') || k.includes('supabase')) toRemove.push(k);
+        }
+        toRemove.forEach((k) => localStorage.removeItem(k));
+      } catch {}
+      try {
+        document.cookie = 'openkpis_return_url=; Path=/; Max-Age=0; SameSite=Lax';
+      } catch {}
+      setUser(null);
+      window.dispatchEvent(new CustomEvent('openkpis-sign-out'));
+      // Hard redirect to ensure cookies/session are applied
+      window.location.replace('/');
     }
-    
-    setUser(null);
-    setLoading(false);
-    
-    // Dispatch sign out event for Giscus
-    window.dispatchEvent(new CustomEvent('openkpis-sign-out'));
-    
-    // Reload to sync state
-    window.location.reload();
   }
 
-  if (loading) {
-    return (
-      <div style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '6px 12px',
-        fontSize: '13px',
-        color: 'var(--ifm-color-emphasis-600)',
-      }}>
-        <span>...</span>
-      </div>
-    );
-  }
-
-  if (user) {
-    const userName = user.user_metadata?.user_name || user.user_metadata?.full_name || 'User';
-    const avatarUrl = user.user_metadata?.avatar_url;
-    const userEmail = user.email;
+  const renderSignedIn = () => {
+    const userName = user?.user_metadata?.user_name || user?.user_metadata?.full_name || 'User';
+    const avatarUrl = user?.user_metadata?.avatar_url;
+    const userEmail = user?.email;
 
     return (
-      <div ref={dropdownRef} style={{ position: 'relative', display: 'inline-block', margin: '0 8px' }}>
+      <div ref={dropdownRef} className="auth-slot">
         <button
           ref={buttonRef}
-          onClick={() => {
-            if (buttonRef.current) {
-              const rect = buttonRef.current.getBoundingClientRect();
-              setDropdownPosition({
-                top: rect.bottom + window.scrollY + 8,
-                right: window.innerWidth - rect.right + window.scrollX,
-              });
-            }
-            setDropdownOpen(!dropdownOpen);
-          }}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '4px 12px 4px 4px',
-            borderRadius: '20px',
-            backgroundColor: dropdownOpen ? 'var(--ifm-color-emphasis-200)' : 'var(--ifm-color-emphasis-100)',
-            border: 'none',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            if (!dropdownOpen) {
-              e.currentTarget.style.backgroundColor = 'var(--ifm-color-emphasis-200)';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!dropdownOpen) {
-              e.currentTarget.style.backgroundColor = 'var(--ifm-color-emphasis-100)';
-            }
-          }}
+          onClick={toggleDropdown}
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={dropdownOpen}
+          aria-controls="user-menu"
+          className="user-button"
+          style={dropdownOpen ? { position: 'relative', zIndex: 10001 } : undefined}
         >
-          {avatarUrl && (
-            <img 
-              src={avatarUrl} 
-              alt={userName}
-              style={{
-                width: '24px',
-                height: '24px',
-                borderRadius: '50%',
-                border: '2px solid var(--ifm-color-primary)',
-              }}
-            />
-          )}
-          <span style={{
-            fontSize: '13px',
-            fontWeight: 500,
-            color: 'var(--ifm-font-color-base)',
-            maxWidth: '120px',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}>
-            {userName}
-          </span>
-          <svg 
-            width="12" 
-            height="12" 
-            viewBox="0 0 12 12" 
-            fill="var(--ifm-font-color-base)"
-            style={{
-              transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.2s',
-            }}
-          >
-            <path d="M6 9L1 4h10z"/>
+          {avatarUrl && <img src={avatarUrl} alt={userName} className="user-avatar" />}
+          <span className="user-name">{userName}</span>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="var(--ifm-font-color-base)" className="chevron">
+            <path d="M6 9L1 4h10z" />
           </svg>
         </button>
 
         {dropdownOpen && (
-          <div style={{
-            position: 'fixed',
-            top: `${dropdownPosition.top}px`,
-            right: `${dropdownPosition.right}px`,
-            minWidth: '220px',
-            maxWidth: 'calc(100vw - 2rem)',
-            backgroundColor: 'var(--ifm-background-color)',
-            border: '1px solid var(--ifm-color-emphasis-300)',
-            borderRadius: '8px',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-            zIndex: 9999,
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              padding: '12px 16px',
-              borderBottom: '1px solid var(--ifm-color-emphasis-200)',
-              backgroundColor: 'var(--ifm-color-emphasis-100)',
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-              }}>
-                {avatarUrl && (
-                  <img 
-                    src={avatarUrl} 
-                    alt={userName}
-                    style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '50%',
-                      border: '2px solid var(--ifm-color-primary)',
-                    }}
-                  />
-                )}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    color: 'var(--ifm-font-color-base)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}>
+          <div
+            id="user-menu"
+            role="menu"
+            className="dropdown-panel"
+            style={{ top: `${dropdownPosition.top}px`, right: `${dropdownPosition.right}px`, maxWidth: 'calc(100vw - 2rem)' }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setDropdownOpen(false);
+                buttonRef.current?.focus();
+              }
+            }}
+          >
+            <div className="dropdown-header">
+              <div className="dropdown-user-row">
+                {avatarUrl && <img src={avatarUrl} alt={userName} className="avatar-lg" />}
+                <div className="dropdown-user-info">
+                  <div className="dropdown-username">
                     {userName}
                   </div>
-                  {userEmail && (
-                    <div style={{
-                      fontSize: '12px',
-                      color: 'var(--ifm-color-emphasis-700)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {userEmail}
-                    </div>
-                  )}
+                  {userEmail && <div className="user-email">{userEmail}</div>}
                 </div>
               </div>
             </div>
 
-            <div style={{ padding: '8px 0' }}>
-              <a
-                href={`https://github.com/${userName}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '10px 16px',
-                  fontSize: '14px',
-                  color: 'var(--ifm-font-color-base)',
-                  textDecoration: 'none',
-                  transition: 'background-color 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--ifm-color-emphasis-100)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
+            <div className="dropdown-section">
+              {['editor', 'admin'].includes(role || '') && (
+                <a href="/editor/review" role="menuitem" className="dropdown-item">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M2 2.5A1.5 1.5 0 013.5 1h9A1.5 1.5 0 0114 2.5V4H2V2.5zM2 5h12v8.5A1.5 1.5 0 0112.5 15h-9A1.5 1.5 0 012 13.5V5zm3 2a.5.5 0 000 1h6a.5.5 0 000-1H5z" />
+                  </svg>
+                  <span>Editor Review</span>
+                </a>
+              )}
+              <a href="/kpis/new" role="menuitem" className="dropdown-item">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-                </svg>
-                <span>View GitHub Profile</span>
-              </a>
-
-              <a
-                href="/kpis/new"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '10px 16px',
-                  fontSize: '14px',
-                  color: 'var(--ifm-font-color-base)',
-                  textDecoration: 'none',
-                  transition: 'background-color 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--ifm-color-emphasis-100)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M8 0a1 1 0 011 1v6h6a1 1 0 110 2H9v6a1 1 0 11-2 0V9H1a1 1 0 110-2h6V1a1 1 0 011-1z"/>
+                  <path d="M8 0a1 1 0 011 1v6h6a1 1 0 110 2H9v6a1 1 0 11-2 0V9H1a1 1 0 110-2h6V1a1 1 0 011-1z" />
                 </svg>
                 <span>Create New KPI</span>
               </a>
-
-              <a
-                href="/dashboard"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '10px 16px',
-                  fontSize: '14px',
-                  color: 'var(--ifm-font-color-base)',
-                  textDecoration: 'none',
-                  transition: 'background-color 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--ifm-color-emphasis-100)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
+              <a href="/myprofile" role="menuitem" className="dropdown-item">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M0 2a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H2a2 2 0 01-2-2V2zm1 2v10a1 1 0 001 1h12a1 1 0 001-1V4H1z"/>
+                  <path d="M8 8a3 3 0 100-6 3 3 0 000 6z" />
+                  <path fillRule="evenodd" d="M14 14s-1-4-6-4-6 4-6 4 2 2 6 2 6-2 6-2z" />
                 </svg>
-                <span>My Dashboard</span>
+                <span>My Profile</span>
               </a>
-
-              <a
-                href="/analysis"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '10px 16px',
-                  fontSize: '14px',
-                  color: 'var(--ifm-font-color-base)',
-                  textDecoration: 'none',
-                  transition: 'background-color 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--ifm-color-emphasis-100)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
+              <a href="/analysis" role="menuitem" className="dropdown-item">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M2 2a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V2zm2 1a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V4a1 1 0 00-1-1H4z"/>
-                  <path d="M6 6a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3A.5.5 0 016 6zM6 9a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3A.5.5 0 016 9z"/>
+                  <path d="M2 2a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V2zm2 1a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V4a1 1 0 00-1-1H4z" />
+                  <path d="M6 6a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3A.5.5 0 016 6zM6 9a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3A.5.5 0 016 9z" />
                 </svg>
                 <span>My Analysis</span>
               </a>
             </div>
 
-            <div style={{
-              borderTop: '1px solid var(--ifm-color-emphasis-200)',
-              padding: '8px 0',
-            }}>
-              <button
-                onClick={handleSignOut}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  width: '100%',
-                  padding: '10px 16px',
-                  fontSize: '14px',
-                  color: '#d32f2f',
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  transition: 'background-color 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--ifm-color-emphasis-100)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
+            <div className="dropdown-separator">
+              <button onClick={handleSignOut} className="dropdown-item dropdown-item--danger">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M3 2a1 1 0 00-1 1v10a1 1 0 001 1h5a1 1 0 100-2H4V4h4a1 1 0 100-2H3zm9.707 4.293a1 1 0 00-1.414 1.414L12.586 9H7a1 1 0 100 2h5.586l-1.293 1.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3z"/>
+                  <path d="M3 2a1 1 0 00-1 1v10a1 1 0 001 1h5a1 1 0 100-2H4V4h4a1 1 0 100-2H3zm9.707 4.293a1 1 0 00-1.414 1.414L12.586 9H7a1 1 0 100 2h5.586l-1.293 1.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3z" />
                 </svg>
                 <span>Sign Out</span>
               </button>
@@ -399,43 +205,25 @@ export default function GitHubSignIn() {
         )}
       </div>
     );
-  }
+  };
 
-  return (
-    <button
-      onClick={handleSignIn}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-        padding: '5px 14px',
-        fontSize: '13px',
-        fontWeight: 500,
-        border: '1px solid var(--ifm-color-primary)',
-        borderRadius: '6px',
-        backgroundColor: 'var(--ifm-color-primary)',
-        color: '#ffffff',
-        cursor: 'pointer',
-        transition: 'all 0.2s',
-        pointerEvents: 'auto',
-        margin: '0 8px',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = 'var(--ifm-color-primary-dark)';
-        e.currentTarget.style.transform = 'translateY(-1px)';
-        e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.15)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = 'var(--ifm-color-primary)';
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = 'none';
-      }}
-    >
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-      </svg>
-      <span>Sign in</span>
-    </button>
-  );
+  const renderSignedOut = () => {
+    return (
+      <div className="auth-slot">
+        <button
+          onClick={handleSignIn}
+          className="btn btn-primary"
+          aria-label="Sign in with GitHub"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+          </svg>
+          <span>Sign in</span>
+        </button>
+      </div>
+    );
+  };
+
+  return user ? renderSignedIn() : renderSignedOut();
 }
 

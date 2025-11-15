@@ -1,70 +1,56 @@
 /**
  * Supabase Client for Server-Side (API Routes, Server Components)
- * Uses Secret Key (not publishable key) for admin operations
+ * Uses unified environment variables (no _DEV suffix)
  */
 
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-/**
- * Get Supabase server configuration
- * For auth operations, use ANON_KEY (publishable key) to preserve user sessions
- * For admin operations, use SECRET_KEY (service role key)
- */
 function getSupabaseServerConfig(useAnonKey: boolean = true) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+
   if (useAnonKey) {
-    // Use anon key for auth operations (preserves user sessions)
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
     if (!url || !anonKey) {
-      const isVercel = process.env.VERCEL ? 'Vercel Dashboard' : 'environment variables';
-      throw new Error(
-        `Missing Supabase configuration. ` +
-        `Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in ${isVercel}`
-      );
+      throw new Error('[Supabase] Missing server auth envs: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
     }
     return { url, key: anonKey };
-  } else {
-    // Use secret key for admin operations (bypasses RLS)
-    const secretKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !secretKey) {
-      const isVercel = process.env.VERCEL ? 'Vercel Dashboard' : 'environment variables';
-      throw new Error(
-        `Missing Supabase server configuration. ` +
-        `Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY) in ${isVercel}`
-      );
-    }
-    return { url, key: secretKey };
   }
+
+  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (!url || !serviceRole) {
+    throw new Error('[Supabase] Missing server admin envs: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+  }
+  return { url, key: serviceRole };
 }
 
 /**
  * Create Supabase client for server-side operations with user session support
  * Use this in API routes that need to access the current user's session
- * 
- * Note: In Next.js 15, cookies() may need to be awaited
  */
 export async function createClient() {
   const cookieStore = await cookies();
-  const config = getSupabaseServerConfig(true); // Use anon key for auth
-  
+  const config = getSupabaseServerConfig(true);
+
   return createServerClient(config.url, config.key, {
     cookies: {
-      getAll() {
-        return cookieStore.getAll();
+      get(name: string) {
+        return cookieStore.get(name)?.value;
       },
-      setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) {
+      set(name: string, value: string, options?: any) {
         try {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
-        } catch (error) {
-          // The `setAll` method was called from a Server Component.
-          // This can be ignored if you have middleware refreshing
-          // user sessions.
+          cookieStore.set(name, value, options);
+        } catch {
+          // ignore in server components
         }
       },
+      remove(name: string, options?: any) {
+        try {
+          cookieStore.set(name, '', { ...options, maxAge: 0 });
+        } catch {
+          // ignore in server components
+        }
+      }
     } as any,
   });
 }
@@ -74,9 +60,8 @@ export async function createClient() {
  * Use only for server-side admin operations
  */
 export function createAdminClient() {
-  const config = getSupabaseServerConfig();
+  const config = getSupabaseServerConfig(false);
   const { createClient: createSupabaseClient } = require('@supabase/supabase-js');
-  
   return createSupabaseClient(config.url, config.key);
 }
 

@@ -11,9 +11,22 @@ export async function isAuthenticated(): Promise<boolean> {
 }
 
 export async function getCurrentUser() {
-  const { data: { user }, error } = await supabase.auth.getUser();
+  // Avoid noisy "Auth session missing!" errors by checking session first
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return null;
+
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
   if (error) {
-    console.error('Error getting user:', error);
+    // Ignore missing-session specific error; we already checked above
+    if ((error as any)?.name !== 'AuthSessionMissingError') {
+      console.error('Error getting user:', error);
+    }
     return null;
   }
   return user;
@@ -24,6 +37,10 @@ export async function signInWithGitHub() {
   if (typeof window !== 'undefined') {
     const returnUrl = window.location.pathname + window.location.search + window.location.hash;
     sessionStorage.setItem('openkpis_return_url', returnUrl);
+    try {
+      // Also set a short-lived cookie so the server callback can read it for instant redirect
+      document.cookie = `openkpis_return_url=${encodeURIComponent(returnUrl)}; Path=/; Max-Age=600; SameSite=Lax`;
+    } catch {}
   }
 
   const redirectTo = typeof window !== 'undefined' 

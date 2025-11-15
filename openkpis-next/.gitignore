@@ -25,6 +25,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
+.env
+.env.*
 .env*.local
 .env.local
 .env.development.local
@@ -46,6 +48,38 @@ next-env.d.ts
 
 # internal artifacts
 /internal/
+internal-files/
+**/internal-files/
+internal-files/env/
+
+# api internal bucket
+**/api_internal/**
+openkpis-next/openkpis-next/api_internal/
+
+# root-level private docs and credentials
+/credentials/
+/internal_docs/
+
+# dev-only folders moved into internal-files
+/scripts/
+/supabase-migrations/
+/openkpis-next/scripts/
+/openkpis-next/supabase-migrations/
+
+# local helper scripts (now in internal-files)
+/openkpis-next/sync-env.ps1
+
+# ignore dev supabase infra
+/openkpis-next/infra/supabase-dev/
+
+# backups and archives
+/openkpis-next-backup-*/
+
+# local tools and test html
+/test-openai-key.html
+
+# project notes (moved to internal-files/)
+/Tasks_updated.md
 
 # infrastructure configs
 /infra/

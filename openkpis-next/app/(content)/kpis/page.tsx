@@ -1,8 +1,8 @@
 'use client';
 
-import React, { Suspense, useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase, STATUS, getCurrentUser } from '@/lib/supabase';
 
 interface KPI {
@@ -19,8 +19,9 @@ interface KPI {
 
 function KPIsPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [kpis, setKpis] = useState<KPI[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
   
   // Filters from URL
@@ -105,13 +106,7 @@ function KPIsPageContent() {
     });
   }, [kpis, searchQuery, tagFilter, categoryFilter, industryFilter]);
 
-  if (loading) {
-    return (
-      <main style={{ padding: '2rem', textAlign: 'center' }}>
-        <p>Loading KPIs...</p>
-      </main>
-    );
-  }
+  // Do not block rendering; show page immediately without interstitials
 
   return (
     <main style={{ padding: '2rem 1rem', maxWidth: '1400px', margin: '0 auto' }}>
@@ -383,16 +378,6 @@ function KPIsPageContent() {
 }
 
 export default function KPIsPage() {
-  return (
-    <Suspense
-      fallback={
-        <main style={{ padding: '2rem', textAlign: 'center' }}>
-          <p>Loading KPIs...</p>
-        </main>
-      }
-    >
-      <KPIsPageContent />
-    </Suspense>
-  );
+  return <KPIsPageContent />;
 }
 

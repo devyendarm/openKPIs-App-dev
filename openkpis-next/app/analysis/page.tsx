@@ -10,7 +10,7 @@ type BasketItem = {
   item_id: string;
   item_slug: string;
   item_name: string;
-  added_at: string;
+  created_at?: string;
 };
 
 type SavedAnalysis = {
@@ -145,7 +145,7 @@ export default function AnalysisPage() {
       let query = supabase
         .from('analysis_basket')
         .select('*')
-        .order('added_at', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (auth?.user?.id) {
         query = query.eq('user_id', auth.user.id);
@@ -157,7 +157,13 @@ export default function AnalysisPage() {
       if (error) throw error;
       setBasketItems(data ?? []);
     } catch (error) {
-      console.error('Error loading basket items:', error);
+      const anyErr = error as any;
+      const message =
+        (anyErr && (anyErr.message || anyErr.error?.message || anyErr.code)) ||
+        'Unknown error';
+      // Ensure we don't keep stale items and log useful info
+      setBasketItems([]);
+      console.error('Error loading basket items:', message, anyErr);
     } finally {
       setLoadingBasket(false);
     }
@@ -173,7 +179,11 @@ export default function AnalysisPage() {
       setSavedInsights(json.insights ?? []);
       setSavedDashboards(json.dashboards ?? []);
     } catch (error) {
-      console.error('Error loading saved data:', error);
+      const anyErr = error as any;
+      const message =
+        (anyErr && (anyErr.message || anyErr.error?.message || anyErr.code)) ||
+        'Unknown error';
+      console.error('Error loading saved data:', message, anyErr);
     } finally {
       setLoadingSaved(false);
     }
@@ -201,7 +211,11 @@ export default function AnalysisPage() {
 
       setBasketItems((prev) => prev.filter((item) => !(item.item_id === itemId && item.item_type === itemType)));
     } catch (error) {
-      console.error('Error removing item from analysis basket:', error);
+      const anyErr = error as any;
+      const message =
+        (anyErr && (anyErr.message || anyErr.error?.message || anyErr.code)) ||
+        'Unknown error';
+      console.error('Error removing item from analysis basket:', message, anyErr);
     }
   }
 
@@ -228,7 +242,11 @@ export default function AnalysisPage() {
 
       setBasketItems([]);
     } catch (error) {
-      console.error('Error clearing analysis basket:', error);
+      const anyErr = error as any;
+      const message =
+        (anyErr && (anyErr.message || anyErr.error?.message || anyErr.code)) ||
+        'Unknown error';
+      console.error('Error clearing analysis basket:', message, anyErr);
     }
   }
 

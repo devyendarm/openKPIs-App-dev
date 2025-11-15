@@ -1,0 +1,189 @@
+/* Buttons */
+.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--space-2);
+	padding: 0.5rem 0.9rem;
+	border-radius: var(--radius-md);
+	border: 1px solid var(--color-border-strong);
+	background-color: transparent;
+	color: var(--color-fg);
+	font-size: 0.875rem;
+	font-weight: 500;
+	text-decoration: none;
+	cursor: pointer;
+	transition: background-color 0.2s, box-shadow 0.2s, transform 0.1s;
+}
+.btn:hover { background-color: var(--ifm-color-emphasis-100, #f3f4f6); }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { outline: 2px solid rgba(79,70,229,0.5); outline-offset: 2px; }
+.btn-primary {
+	border: none;
+	background-color: var(--color-primary);
+	color: #fff;
+}
+.btn-primary:hover { background-color: var(--color-primary-dark); }
+.btn-muted {
+	border-color: var(--color-border-strong);
+	background-color: var(--ifm-color-emphasis-100, #f3f4f6);
+}
+
+/* Links */
+.link { color: var(--color-fg); text-decoration: none; }
+.link:hover { text-decoration: underline; }
+.nav-link:focus-visible { outline: 2px solid rgba(79,70,229,0.3); outline-offset: 2px; }
+
+/* Badges */
+.badge {
+	display: inline-block;
+	padding: 0.15rem 0.6rem;
+	border-radius: var(--radius-pill);
+	background-color: var(--color-primary);
+	color: #fff;
+	font-size: 0.75rem;
+	font-weight: 600;
+}
+
+/* Cards */
+.card {
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-xl);
+	background-color: #fff;
+	box-shadow: var(--shadow-sm);
+}
+
+/* Messages */
+.msg { padding: 1rem; border-radius: var(--radius-lg); border: 1px solid; }
+.msg-success { border-color: var(--color-success); background-color: var(--color-success-bg); color: #065f46; }
+.msg-error { border-color: var(--color-error); background-color: var(--color-error-bg); color: #7f1d1d; }
+.msg-warning { border-color: var(--color-warning); background-color: var(--color-warning-bg); color: #92400e; }
+
+/* Inputs */
+.input {
+	padding: 0.4rem 0.6rem;
+	border: 1px solid var(--color-border-strong);
+	border-radius: var(--radius-sm);
+	background-color: var(--color-bg);
+	color: var(--color-fg);
+	font-size: 0.85rem;
+	outline: none;
+}
+.input:focus { box-shadow: 0 0 0 2px rgba(79,70,229,0.15); }
+
+/* Dropdown panel */
+.dropdown-panel {
+	position: fixed;
+	background-color: var(--color-bg);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-lg);
+	box-shadow: var(--shadow-md);
+	z-index: 9999;
+	overflow: hidden;
+	min-width: 220px;
+}
+.dropdown-item {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 16px;
+	font-size: 14px;
+	color: var(--color-fg);
+	text-decoration: none;
+	transition: background-color 0.2s;
+}
+.dropdown-item:hover { background-color: var(--ifm-color-emphasis-100, #f3f4f6); }
+.dropdown-item:focus-visible { outline: 2px solid rgba(79,70,229,0.3); outline-offset: -2px; }
+
+/* User button (GitHubSignIn) */
+.user-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 12px 4px 4px;
+	border-radius: 20px;
+	background-color: var(--ifm-color-emphasis-100, #f3f4f6);
+	border: none;
+	cursor: pointer;
+	transition: all 0.2s;
+}
+.user-button:hover { background-color: var(--ifm-color-emphasis-200, #e5e7eb); }
+.user-avatar {
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	border: 2px solid var(--color-primary);
+}
+.user-name {
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--color-fg);
+	max-width: 120px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.nav-link--icon {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+}
+.dropdown-header {
+	padding: 12px 16px;
+	border-bottom: 1px solid var(--color-border);
+	background-color: var(--ifm-color-emphasis-100, #f3f4f6);
+}
+.avatar-lg {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	border: 2px solid var(--color-primary);
+}
+.user-email {
+	font-size: 12px;
+	color: var(--color-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Auth slot to reserve width and prevent layout shifts */
+.auth-slot {
+	min-width: 180px;
+	display: inline-flex;
+	justify-content: flex-end;
+	position: relative;
+}
+
+/* Dropdown internals */
+.dropdown-user-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+.dropdown-user-info {
+	flex: 1;
+	min-width: 0;
+}
+.dropdown-username {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--ifm-font-color-base);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.dropdown-section {
+	padding: 8px 0;
+}
+.dropdown-separator {
+	border-top: 1px solid var(--ifm-color-emphasis-200);
+	padding: 8px 0;
+}
+.dropdown-item--danger {
+	color: #d32f2f;
+}
+.chevron { transition: transform 0.2s; }
+.user-button[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+
+

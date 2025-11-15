@@ -2,13 +2,20 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Header from "@/components/Header";
 import Script from "next/script";
+import Footer from "@/components/Footer";
 import "./globals.css";
+import "./styles/tokens.css";
+import "./styles/components.css";
+import "./styles/layout.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "OpenKPIs - Community-Driven Analytics KPIs",
   description: "Open-source repository of KPIs, Metrics, Dimensions, and Events for analytics professionals",
+  alternates: {
+    canonical: process.env.NEXT_PUBLIC_APP_URL || '/',
+  },
 };
 
 export default function RootLayout({
@@ -21,31 +28,23 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="light" style={{ colorScheme: 'light' }}>
       <head>
-        {/* Force light mode - prevent dark mode */}
+        {/* Force light mode once */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
                 document.documentElement.setAttribute('data-theme', 'light');
                 document.documentElement.style.colorScheme = 'light';
-                // Prevent theme switching
-                const observer = new MutationObserver(function(mutations) {
-                  mutations.forEach(function(mutation) {
-                    if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
-                      if (document.documentElement.getAttribute('data-theme') !== 'light') {
-                        document.documentElement.setAttribute('data-theme', 'light');
-                      }
-                    }
-                  });
-                });
-                observer.observe(document.documentElement, {
-                  attributes: true,
-                  attributeFilter: ['data-theme', 'class']
-                });
               })();
             `,
           }}
         />
+        {/* Preconnect to Supabase */}
+        {process.env.NEXT_PUBLIC_SUPABASE_URL ? (
+          <>
+            <link rel="preconnect" href="${process.env.NEXT_PUBLIC_SUPABASE_URL}" crossOrigin="" />
+          </>
+        ) : null}
         {/* Google Tag Manager */}
         <Script id="gtm-head" strategy="afterInteractive">
           {`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
@@ -67,6 +66,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         </noscript>
         <Header />
         {children}
+        <Footer />
       </body>
     </html>
   );

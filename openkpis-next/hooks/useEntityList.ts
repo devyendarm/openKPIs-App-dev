@@ -1,0 +1,49 @@
+import { useEffect, useState } from 'react';
+import type { EntityKind, AnyEntity } from '@/src/types/entities';
+import { listEntities } from '@/lib/repository/entityRepository';
+
+interface UseEntityListOptions {
+  kind: EntityKind;
+  status?: 'draft' | 'published' | 'archived';
+  search?: string;
+  createdBy?: string;
+  limit?: number;
+}
+
+export function useEntityList(options: UseEntityListOptions) {
+  const [items, setItems] = useState<AnyEntity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    listEntities({
+      kind: options.kind,
+      status: options.status,
+      search: options.search,
+      createdBy: options.createdBy,
+      limit: options.limit ?? 100,
+    })
+      .then((data) => {
+        if (!cancelled) setItems(data);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e?.message || 'Failed to load items');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [options.kind, options.status, options.search, options.createdBy, options.limit]);
+
+  return { items, loading, error };
+}
+
+
+
+
+
