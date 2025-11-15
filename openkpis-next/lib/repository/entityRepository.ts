@@ -41,8 +41,11 @@ export async function listEntities(params: ListParams): Promise<AnyEntity[]> {
   if (params.offset !== undefined) query = (query as any).range(params.offset, (params.offset || 0) + (params.limit || 50) - 1);
 
   const { data, error } = await query;
-  if (error || !data) return [];
-  return data as AnyEntity[];
+  if (error) {
+    // Surface errors to callers for proper UI handling
+    throw new Error(error.message || 'Failed to list entities');
+  }
+  return (data || []) as AnyEntity[];
 }
 
 export async function getEntityBySlug(kind: EntityKind, slug: string): Promise<AnyEntity | null> {
