@@ -40,6 +40,23 @@ function kindToSection(kind: EntityKind): Section {
 	}
 }
 
+function defaultDescription(kind: EntityKind): string | undefined {
+	switch (kind) {
+		case 'dimension':
+			return 'Data attributes and segmentation variables used across KPIs for consistent analysis.';
+		case 'metric':
+			return 'Standardized metrics and measurements for analytics.';
+		case 'event':
+			return 'Tracking events and parameters needed to calculate KPIs across different platforms.';
+		case 'dashboard':
+			return 'Pre-configured dashboard templates and configurations.';
+		case 'kpi':
+			return 'Standardized KPI definitions with formulas, implementation guides, and platform equivalents.';
+		default:
+			return undefined;
+	}
+}
+
 function getEntityPath(kind: EntityKind): string {
 	return `/${kindToSection(kind)}`;
 }
@@ -50,7 +67,7 @@ export default function Catalog(props: CatalogProps) {
 	const section: Section = kindToSection(kind);
 	const derivedTitle = ('title' in props && props.title) ? props.title : section.charAt(0).toUpperCase() + section.slice(1);
 	const addNewPath = ('addNewPath' in props && props.addNewPath) ? props.addNewPath : `/${section}/new`;
-	const description = ('description' in props) ? (props as NewProps).description : undefined;
+	const description = ('description' in props) ? (props as NewProps).description : defaultDescription(kind);
 
 	const [search, setSearch] = useState('');
 	const { items, loading } = useEntityList({ kind, search, status: 'published', limit: 500 });
@@ -74,26 +91,31 @@ export default function Catalog(props: CatalogProps) {
 
 	return (
 		<main style={{ padding: '2rem 1rem', maxWidth: '1400px', margin: '0 auto' }}>
-			<div style={{ marginBottom: '2rem' }}>
-				<h1 style={{ fontSize: '2rem', fontWeight: 600, marginBottom: '0.5rem' }}>{derivedTitle}</h1>
-				{description ? (
-					<p style={{ color: 'var(--ifm-color-emphasis-600)', marginBottom: '1.5rem' }}>{description}</p>
-				) : null}
-				<div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-					<input
-						type="text"
-						className="input"
-						placeholder={`Search ${derivedTitle}...`}
-						value={search}
-						onChange={(e) => setSearch(e.target.value)}
-						style={{ minWidth: 240 }}
-					/>
-					{addNewPath ? (
+			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1rem' }}>
+				<div style={{ flex: '1 1 auto' }}>
+					<h1 style={{ fontSize: '2rem', fontWeight: 600, marginBottom: '0.5rem' }}>{derivedTitle}</h1>
+					{description ? (
+						<p style={{ color: 'var(--ifm-color-emphasis-600)', marginBottom: 0 }}>{description}</p>
+					) : null}
+				</div>
+				{addNewPath ? (
+					<div>
 						<Link href={addNewPath} className="btn btn-primary">
 							{`Add New ${kind === 'kpi' ? 'KPI' : kind.charAt(0).toUpperCase() + kind.slice(1)}`}
 						</Link>
-					) : null}
-				</div>
+					</div>
+				) : null}
+			</div>
+
+			<div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', marginBottom: '1rem' }}>
+				<input
+					type="text"
+					className="input"
+					placeholder={`Search ${derivedTitle}...`}
+					value={search}
+					onChange={(e) => setSearch(e.target.value)}
+					style={{ minWidth: 240, width: '100%', maxWidth: 420 }}
+				/>
 			</div>
 
 			<div style={{ marginBottom: '1rem', color: 'var(--ifm-color-emphasis-600)', fontSize: '0.875rem' }}>
