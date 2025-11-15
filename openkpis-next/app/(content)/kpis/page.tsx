@@ -111,43 +111,46 @@ function KPIsPageContent() {
   return (
     <main style={{ padding: '2rem 1rem', maxWidth: '1400px', margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '2rem', fontWeight: '600', marginBottom: '0.5rem' }}>
-          KPIs
-        </h1>
-        <p style={{ color: 'var(--ifm-color-emphasis-600)', marginBottom: '1.5rem' }}>
-          Standardized KPI definitions with formulas, implementation guides, and platform equivalents.
-        </p>
-
-        {/* Add New Button */}
-        <Link
-          href="/kpis/new"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.75rem 1.5rem',
-            backgroundColor: 'var(--ifm-color-primary)',
-            color: 'white',
-            textDecoration: 'none',
-            borderRadius: '8px',
-            fontWeight: '500',
-            transition: 'all 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--ifm-color-primary-dark)';
-            e.currentTarget.style.transform = 'translateY(-2px)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--ifm-color-primary)';
-            e.currentTarget.style.transform = 'translateY(0)';
-          }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
-            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-          </svg>
-          Add New KPI
-        </Link>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '2rem' }}>
+        <div style={{ flex: '1 1 auto' }}>
+          <h1 style={{ fontSize: '2rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+            KPIs
+          </h1>
+          <p style={{ color: 'var(--ifm-color-emphasis-600)', marginBottom: '0' }}>
+            Standardized KPI definitions with formulas, implementation guides, and platform equivalents.
+          </p>
+        </div>
+        <div>
+          <Link
+            href="/kpis/new"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.75rem 1.5rem',
+              backgroundColor: 'var(--ifm-color-primary)',
+              color: 'white',
+              textDecoration: 'none',
+              borderRadius: '8px',
+              fontWeight: '500',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--ifm-color-primary-dark)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--ifm-color-primary)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+            </svg>
+            Add New KPI
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}

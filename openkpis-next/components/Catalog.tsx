@@ -90,7 +90,7 @@ export default function Catalog(props: CatalogProps) {
 					/>
 					{addNewPath ? (
 						<Link href={addNewPath} className="btn btn-primary">
-							Add New
+							{`Add New ${kind === 'kpi' ? 'KPI' : kind.charAt(0).toUpperCase() + kind.slice(1)}`}
 						</Link>
 					) : null}
 				</div>
