@@ -19,22 +19,22 @@ export function useEntityList(options: UseEntityListOptions) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    listEntities({
-      kind: options.kind,
-      status: options.status,
-      search: options.search,
-      createdBy: options.createdBy,
-      limit: options.limit ?? 100,
-    })
-      .then((data) => {
+    (async () => {
+      try {
+        const data = await listEntities({
+          kind: options.kind,
+          status: options.status,
+          search: options.search,
+          createdBy: options.createdBy,
+          limit: options.limit ?? 100,
+        });
         if (!cancelled) setItems(data);
-      })
-      .catch((e) => {
+      } catch (e: any) {
         if (!cancelled) setError(e?.message || 'Failed to load items');
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };

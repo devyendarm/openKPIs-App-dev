@@ -17,13 +17,18 @@ export default function MetricDetailPage() {
   useEffect(() => {
     if (slug) {
       setLoading(true);
-      supabase
-        .from('metrics')
-        .select('*')
-        .eq('slug', slug)
-        .single()
-        .then(({ data }) => setMetric(data))
-        .finally(() => setLoading(false));
+      (async () => {
+        try {
+          const { data } = await supabase
+            .from('metrics')
+            .select('*')
+            .eq('slug', slug)
+            .single();
+          setMetric(data);
+        } finally {
+          setLoading(false);
+        }
+      })();
     }
   }, [slug]);
 

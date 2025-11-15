@@ -11,16 +11,16 @@ export function useEntity(kind: EntityKind, slug: string) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getEntityBySlug(kind, slug)
-      .then((data) => {
+    (async () => {
+      try {
+        const data = await getEntityBySlug(kind, slug);
         if (!cancelled) setItem(data);
-      })
-      .catch((e) => {
+      } catch (e: any) {
         if (!cancelled) setError(e?.message || 'Failed to load item');
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
