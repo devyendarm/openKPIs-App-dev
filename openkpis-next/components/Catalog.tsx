@@ -70,7 +70,7 @@ export default function Catalog(props: CatalogProps) {
 	const description = ('description' in props) ? (props as NewProps).description : defaultDescription(kind);
 
 	const [search, setSearch] = useState('');
-	const { items, loading } = useEntityList({ kind, search, status: 'published', limit: 500 });
+	const { items, loading, error } = useEntityList({ kind, search, status: 'published', limit: 500 });
 
 	const filtered = useMemo(() => {
 		const q = search.trim().toLowerCase();
