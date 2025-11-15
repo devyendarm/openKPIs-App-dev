@@ -166,5 +166,8 @@
 	.hide-mobile { display: none !important; }
 }
 
+/* Avoid layout shift when vertical scrollbar appears */
+html { scrollbar-gutter: stable; }
+
 
 
