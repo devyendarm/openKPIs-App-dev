@@ -32,10 +32,7 @@ export default function UserDashboard() {
   }, [user, activeTab, router]);
 
   async function loadFavorites() {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
+    if (!user) return;
 
     try {
       // Load favorites with full item details
@@ -84,7 +81,7 @@ export default function UserDashboard() {
         (anyErr && (anyErr.message || anyErr.error?.message || anyErr.code)) || 'Unknown error';
       console.error('Error loading favorites:', message, anyErr);
     } finally {
-      setLoading(false);
+      // no-op
     }
   }
 
