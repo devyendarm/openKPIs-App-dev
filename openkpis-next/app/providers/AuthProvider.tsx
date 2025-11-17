@@ -34,9 +34,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				if (!mounted) return;
 				setUser(u);
 				if (u) {
-					const r = await getUserRoleClient();
+					// Try client role first
+					let r = await getUserRoleClient();
+					// Fallback to server-resolved role (more reliable on first load)
+					try {
+						const resp = await fetch('/api/debug/auth', { cache: 'no-store' });
+						const dj = await resp.json();
+						if (dj?.user?.role && (dj.user.role === 'admin' || dj.user.role === 'editor' || dj.user.role === 'contributor')) {
+							r = dj.user.role;
+						}
+					} catch {}
 					if (!mounted) return;
-					setRole(r);
+					setRole(r as any);
 				} else {
 					setRole('contributor');
 				}
@@ -49,7 +58,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
 			const nextUser = session?.user ?? null;
 			setUser(nextUser);
-			if (nextUser) setRole(await getUserRoleClient());
+			if (nextUser) {
+				let r = await getUserRoleClient();
+				try {
+					const resp = await fetch('/api/debug/auth', { cache: 'no-store' });
+					const dj = await resp.json();
+					if (dj?.user?.role && (dj.user.role === 'admin' || dj.user.role === 'editor' || dj.user.role === 'contributor')) {
+						r = dj.user.role;
+					}
+				} catch {}
+				setRole(r as any);
+			}
 			else setRole('contributor');
 			// bump context to notify consumers that depend on version changes
 			setVersion((v) => v + 1);
