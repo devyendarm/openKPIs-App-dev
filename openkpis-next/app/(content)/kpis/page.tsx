@@ -34,6 +34,17 @@ function KPIsPageContent() {
     loadData();
   }, []);
 
+  // Re-fetch on auth change or when window regains focus (avoid stale views)
+  useEffect(() => {
+    const handler = () => loadData();
+    window.addEventListener('openkpis-auth-change', handler as EventListener);
+    window.addEventListener('focus', handler, { passive: true } as any);
+    return () => {
+      window.removeEventListener('openkpis-auth-change', handler as EventListener);
+      window.removeEventListener('focus', handler as any);
+    };
+  }, []);
+
   async function loadData() {
     setLoading(true);
     
