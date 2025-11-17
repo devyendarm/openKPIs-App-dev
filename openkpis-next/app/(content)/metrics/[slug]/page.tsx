@@ -20,9 +20,9 @@ export default function MetricDetailPage() {
       (async () => {
         try {
           const { data } = await supabase
-            .from('metrics')
-            .select('*')
-            .eq('slug', slug)
+        .from('metrics')
+        .select('*')
+        .eq('slug', slug)
             .single();
           setMetric(data);
         } finally {

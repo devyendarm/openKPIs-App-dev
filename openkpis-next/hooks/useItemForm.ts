@@ -54,10 +54,10 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
   useMemo(() => {
     (async () => {
       try {
-        const currentUser = await getCurrentUser();
-        setUser(currentUser);
-        if (!currentUser) {
-          setError('Please sign in to create an item.');
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+      if (!currentUser) {
+        setError('Please sign in to create an item.');
         }
       } catch {
         // Non-fatal for form rendering

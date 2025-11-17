@@ -20,9 +20,9 @@ export default function DashboardDetailPage() {
       (async () => {
         try {
           const { data } = await supabase
-            .from('dashboards')
-            .select('*')
-            .eq('slug', slug)
+        .from('dashboards')
+        .select('*')
+        .eq('slug', slug)
             .single();
           setDashboard(data);
         } finally {

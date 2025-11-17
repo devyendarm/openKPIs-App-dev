@@ -54,6 +54,10 @@ function KPIsPageContent() {
 
       const resp = await fetch('/api/debug/list?table=kpis&includeMine=true', { cache: 'no-store' });
       const json = await resp.json();
+      // Debug aid: log what the API returned in production
+      try {
+        console.log('KPIs list API response:', { ok: json?.ok, count: json?.count });
+      } catch {}
       if (!json?.ok) {
         console.error('List API error:', json?.error || 'unknown');
         setKpis([]);

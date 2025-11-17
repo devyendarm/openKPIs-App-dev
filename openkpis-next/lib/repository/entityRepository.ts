@@ -34,9 +34,11 @@ export async function listEntities(params: ListParams & { includeCreatedBy?: str
     }
   }
 
+  // IMPORTANT: Do NOT use another .or() here; it overwrites the previous OR group.
+  // Apply a simple AND filter on name to avoid losing the published/mine logic.
   if (params.search) {
     const q = `%${params.search}%`;
-    query = query.or(`name.ilike.${q},description.ilike.${q},slug.ilike.${q}`);
+    query = query.ilike('name', q);
   }
 
   if (params.orderBy) {
