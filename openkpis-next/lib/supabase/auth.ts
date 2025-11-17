@@ -24,9 +24,12 @@ export async function getCurrentUser() {
 
   if (error) {
     // Ignore missing-session specific error; we already checked above
-    if ((error as any)?.name !== 'AuthSessionMissingError') {
-      console.error('Error getting user:', error);
-    }
+    const name = (error as any)?.name || '';
+    const msg = (error as any)?.message || '';
+    const isMissingSession =
+      name === 'AuthSessionMissingError' ||
+      msg.toLowerCase().includes('auth session missing');
+    if (!isMissingSession) console.error('Error getting user:', error);
     return null;
   }
   return user;
