@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies as nextCookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { getUserRoleServer } from '@/lib/roles/server';
 
 export async function GET() {
   const cookies = await nextCookies();
@@ -8,6 +9,7 @@ export async function GET() {
 
   const { data: sessionData } = await supabase.auth.getSession();
   const { data: userData } = await supabase.auth.getUser();
+  const role = await getUserRoleServer().catch(() => null);
 
   // Detect presence of supabase cookies without exposing values
   const cookieNames = ['sb-access-token', 'sb-refresh-token'];
@@ -26,6 +28,7 @@ export async function GET() {
           email: userData.user.email,
           provider: userData.user.app_metadata?.provider || null,
           user_name: userData.user.user_metadata?.user_name || null,
+          role: role,
         }
       : null,
     cookies: cookiePresence,
