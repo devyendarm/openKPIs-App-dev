@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { supabase, STATUS, getCurrentUser } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/supabase';
 
 interface KPI {
   id: string;
@@ -47,37 +47,19 @@ function KPIsPageContent() {
 
   async function loadData() {
     setLoading(true);
-    
     try {
-      // Get current user
+      // Ensure client auth state for UI, but fetch rows from server API to avoid client RLS/env pitfalls
       const currentUser = await getCurrentUser();
       setUser(currentUser);
-      const ghUser = currentUser?.user_metadata?.user_name;
-      const email = currentUser?.email;
 
-      // Build query
-      let query = supabase.from('kpis').select('*');
-
-      if (ghUser || email) {
-        // Show published (case-insensitive) OR items created by current user (including drafts)
-        const orParts = [`status.ilike.published`];
-        if (ghUser) orParts.push(`created_by.eq.${ghUser}`);
-        if (email) orParts.push(`created_by.eq.${email}`);
-        query = query.or(orParts.join(','));
-      } else {
-        // Not signed in, only show published
-        query = (query as any).ilike('status', STATUS.PUBLISHED);
-      }
-
-      const { data, error } = await query.order('name');
-
-      if (error) {
-        console.error('Supabase error:', error);
+      const resp = await fetch('/api/debug/list?table=kpis&includeMine=true', { cache: 'no-store' });
+      const json = await resp.json();
+      if (!json?.ok) {
+        console.error('List API error:', json?.error || 'unknown');
         setKpis([]);
         return;
       }
-
-      setKpis((data || []) as KPI[]);
+      setKpis((json.data || []) as KPI[]);
     } catch (err) {
       console.error('Error loading KPIs:', err);
       setKpis([]);
