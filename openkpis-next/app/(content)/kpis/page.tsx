@@ -23,6 +23,7 @@ function KPIsPageContent() {
   const [kpis, setKpis] = useState<KPI[]>([]);
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const debugMode = (searchParams.get('debug') || '') === '1';
   
   // Filters from URL
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || searchParams.get('q') || '');
@@ -88,6 +89,7 @@ function KPIsPageContent() {
 
   // Filter KPIs
   const filteredKPIs = useMemo(() => {
+    if (debugMode) return kpis;
     const queryLower = searchQuery.trim().toLowerCase();
     return kpis.filter(kpi => {
       const searchableText = [
@@ -105,7 +107,7 @@ function KPIsPageContent() {
       
       return matchQuery && matchTag && matchCategory && matchIndustry;
     });
-  }, [kpis, searchQuery, tagFilter, categoryFilter, industryFilter]);
+  }, [kpis, searchQuery, tagFilter, categoryFilter, industryFilter, debugMode]);
 
   // Do not block rendering; show page immediately without interstitials
 
@@ -254,6 +256,18 @@ function KPIsPageContent() {
       <div style={{ marginBottom: '1rem', color: 'var(--ifm-color-emphasis-600)', fontSize: '0.875rem' }}>
         {filteredKPIs.length} {filteredKPIs.length === 1 ? 'KPI' : 'KPIs'} found
       </div>
+
+      {debugMode && (
+        <div style={{ margin: '1rem 0', padding: '0.75rem', border: '1px dashed #999', borderRadius: 6, background: '#fffef7' }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Debug (not visible in production):</div>
+          <div style={{ fontFamily: 'monospace', fontSize: 12 }}>
+            loaded={kpis.length} filtered={filteredKPIs.length} user={(user?.email || user?.user_metadata?.user_name || 'none')}
+          </div>
+          <div style={{ fontFamily: 'monospace', fontSize: 12, marginTop: 6 }}>
+            slugs: {kpis.slice(0, 5).map(k => k.slug).join(', ')}
+          </div>
+        </div>
+      )}
 
       {/* KPI Grid */}
       <div style={{
