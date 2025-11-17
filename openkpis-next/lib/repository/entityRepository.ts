@@ -19,7 +19,8 @@ export async function listEntities(params: ListParams): Promise<AnyEntity[]> {
   let query = supabase.from(table).select('*');
 
   if (params.status) {
-    query = query.eq('status', params.status);
+    // Case-insensitive status match (handles 'Published' vs 'published')
+    query = (query as any).ilike('status', params.status);
   }
 
   if (params.createdBy) {

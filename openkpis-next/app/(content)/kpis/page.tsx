@@ -52,17 +52,21 @@ function KPIsPageContent() {
       // Get current user
       const currentUser = await getCurrentUser();
       setUser(currentUser);
-      const userName = currentUser?.user_metadata?.user_name || currentUser?.email;
+      const ghUser = currentUser?.user_metadata?.user_name;
+      const email = currentUser?.email;
 
       // Build query
       let query = supabase.from('kpis').select('*');
 
-      if (userName) {
-        // Show published items OR items created by current user (including drafts)
-        query = query.or(`status.eq.published,created_by.eq.${userName}`);
+      if (ghUser || email) {
+        // Show published (case-insensitive) OR items created by current user (including drafts)
+        const orParts = [`status.ilike.published`];
+        if (ghUser) orParts.push(`created_by.eq.${ghUser}`);
+        if (email) orParts.push(`created_by.eq.${email}`);
+        query = query.or(orParts.join(','));
       } else {
         // Not signed in, only show published
-        query = query.eq('status', STATUS.PUBLISHED);
+        query = (query as any).ilike('status', STATUS.PUBLISHED);
       }
 
       const { data, error } = await query.order('name');
