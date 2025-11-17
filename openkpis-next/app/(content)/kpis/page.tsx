@@ -21,7 +21,7 @@ function KPIsPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [kpis, setKpis] = useState<KPI[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const debugMode = (searchParams.get('debug') || '') === '1';
   const requestIdRef = useRef(0);
@@ -254,7 +254,7 @@ function KPIsPageContent() {
 
       {/* Results Count */}
       <div style={{ marginBottom: '1rem', color: 'var(--ifm-color-emphasis-600)', fontSize: '0.875rem' }}>
-        {filteredKPIs.length} {filteredKPIs.length === 1 ? 'KPI' : 'KPIs'} found
+        {loading ? 'Loading…' : `${filteredKPIs.length} ${filteredKPIs.length === 1 ? 'KPI' : 'KPIs'} found`}
       </div>
 
       {debugMode && (

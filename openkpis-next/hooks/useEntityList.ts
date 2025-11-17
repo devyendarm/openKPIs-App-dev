@@ -12,7 +12,7 @@ interface UseEntityListOptions {
 
 export function useEntityList(options: UseEntityListOptions) {
   const [items, setItems] = useState<AnyEntity[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
 
@@ -31,6 +31,7 @@ export function useEntityList(options: UseEntityListOptions) {
     setError(null);
     (async () => {
       try {
+        setLoading(true);
         const data = await listEntities({
           kind: options.kind,
           status: options.status,
@@ -41,6 +42,8 @@ export function useEntityList(options: UseEntityListOptions) {
         if (!cancelled) setItems(data);
       } catch (e: any) {
         if (!cancelled) setError(e?.message || 'Failed to load items');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => {

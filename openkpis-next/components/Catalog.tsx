@@ -134,6 +134,8 @@ export default function Catalog(props: CatalogProps) {
 			<div style={{ marginBottom: '1rem', color: 'var(--ifm-color-emphasis-600)', fontSize: '0.875rem' }}>
 				{error ? (
 					<span style={{ color: '#991b1b' }}>Failed to load items.</span>
+				) : loading && filtered.length === 0 ? (
+					'Loading…'
 				) : (
 					`${filtered.length} ${filtered.length === 1 ? 'item' : 'items'} found`
 				)}
