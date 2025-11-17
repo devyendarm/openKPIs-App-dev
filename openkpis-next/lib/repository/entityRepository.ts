@@ -14,17 +14,24 @@ export interface ListParams {
   ascending?: boolean;
 }
 
-export async function listEntities(params: ListParams): Promise<AnyEntity[]> {
+export async function listEntities(params: ListParams & { includeCreatedBy?: string[] }): Promise<AnyEntity[]> {
   const table = tableFor(params.kind);
   let query = supabase.from(table).select('*');
 
-  if (params.status) {
-    // Case-insensitive status match (handles 'Published' vs 'published')
-    query = (query as any).ilike('status', params.status);
-  }
+  const includeMine = Array.isArray(params.includeCreatedBy) && params.includeCreatedBy.length > 0;
+  const hasStatus = !!params.status;
 
-  if (params.createdBy) {
-    query = query.eq('created_by', params.createdBy);
+  if (includeMine || hasStatus) {
+    const orParts: string[] = [];
+    if (hasStatus) orParts.push(`status.ilike.${params.status}`);
+    if (includeMine) {
+      for (const v of params.includeCreatedBy!) {
+        if (v) orParts.push(`created_by.eq.${v}`);
+      }
+    }
+    if (orParts.length > 0) {
+      query = query.or(orParts.join(','));
+    }
   }
 
   if (params.search) {
@@ -43,7 +50,6 @@ export async function listEntities(params: ListParams): Promise<AnyEntity[]> {
 
   const { data, error } = await query;
   if (error) {
-    // Surface errors to callers for proper UI handling
     throw new Error(error.message || 'Failed to list entities');
   }
   return (data || []) as AnyEntity[];

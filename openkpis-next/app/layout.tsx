@@ -7,6 +7,7 @@ import "./globals.css";
 import "./styles/tokens.css";
 import "./styles/components.css";
 import "./styles/layout.css";
+import { AuthProvider } from "./providers/AuthProvider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -64,9 +65,11 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
             style={{ display: 'none', visibility: 'hidden' }}
           />
         </noscript>
-        <Header />
-        {children}
-        <Footer />
+        <AuthProvider>
+          <Header />
+          {children}
+          <Footer />
+        </AuthProvider>
       </body>
     </html>
   );

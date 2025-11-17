@@ -3,12 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { supabase, getCurrentUser } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/app/providers/AuthProvider';
 
 export default function UserDashboard() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loading } = useAuth();
   const [activeTab, setActiveTab] = useState<'favorites' | 'contributions'>('favorites');
   const [favorites, setFavorites] = useState<any[]>([]);
   const [contributions, setContributions] = useState<any[]>([]);
@@ -21,27 +21,15 @@ export default function UserDashboard() {
   });
 
   useEffect(() => {
-    checkUser();
-  }, []);
-
-  useEffect(() => {
     if (user) {
       loadFavorites();
       loadContributions();
       loadStats();
     } else {
-      setLoading(false);
+      // If not signed in, redirect home (non-blocking)
+      router.replace('/');
     }
-  }, [user, activeTab]);
-
-  async function checkUser() {
-    const currentUser = await getCurrentUser();
-    if (!currentUser) {
-      router.push('/');
-      return;
-    }
-    setUser(currentUser);
-  }
+  }, [user, activeTab, router]);
 
   async function loadFavorites() {
     if (!user) {

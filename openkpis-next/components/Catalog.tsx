@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { EntityKind, AnyEntity } from '@/src/types/entities';
 import { useEntityList } from '@/hooks/useEntityList';
+import { useAuth } from '@/app/providers/AuthProvider';
 
 type Section = 'kpis' | 'events' | 'dimensions' | 'metrics' | 'dashboards';
 
@@ -70,7 +71,19 @@ export default function Catalog(props: CatalogProps) {
 	const description = ('description' in props) ? (props as NewProps).description : defaultDescription(kind);
 
 	const [search, setSearch] = useState('');
-	const { items, loading, error } = useEntityList({ kind, search, status: 'published', limit: 500 });
+	const { user } = useAuth();
+	const createdBys: string[] = [];
+	const gh = (user?.user_metadata?.user_name as string | undefined) || '';
+	const email = (user?.email as string | undefined) || '';
+	if (gh) createdBys.push(gh);
+	if (email) createdBys.push(email);
+	const { items, loading, error } = useEntityList({
+		kind,
+		search,
+		status: 'published',
+		includeCreatedBy: createdBys.length ? createdBys : undefined,
+		limit: 500,
+	});
 
 	const filtered = useMemo(() => {
 		const q = search.trim().toLowerCase();

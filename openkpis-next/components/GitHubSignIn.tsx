@@ -1,49 +1,23 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { getUserRoleClient } from '@/lib/roles/client';
-import { getCurrentUser, signInWithGitHub, signOut } from '@/lib/supabase/auth';
-import type { User } from '@supabase/supabase-js';
+import React, { useRef, useState } from 'react';
+import { signInWithGitHub, signOut } from '@/lib/supabase/auth';
+import { useAuth } from '@/app/providers/AuthProvider';
 
 export default function GitHubSignIn() {
-  const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<string | null>(null);
+  const { user, role } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, right: 0 });
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function init() {
-      const current = await getCurrentUser();
-      if (!mounted) return;
-      setUser(current);
-      if (current) setRole(await getUserRoleClient());
-      else setRole(null);
-    }
-    init();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const nextUser = session?.user ?? null;
-      setUser(nextUser);
-      if (nextUser) setRole(await getUserRoleClient());
-      else setRole(null);
-
-      window.dispatchEvent(new CustomEvent('openkpis-auth-change', {
-        detail: { user: nextUser }
-      }));
-    });
-
+  React.useEffect(() => {
     const handleDocumentClick = (event: MouseEvent) => {
       const target = event.target as Node;
       if (!dropdownRef.current?.contains(target)) {
         setDropdownOpen(false);
       }
     };
-
     const handleResize = () => {
       if (dropdownOpen && buttonRef.current) {
         const rect = buttonRef.current.getBoundingClientRect();
@@ -53,15 +27,11 @@ export default function GitHubSignIn() {
         });
       }
     };
-
     document.addEventListener('click', handleDocumentClick);
     window.addEventListener('resize', handleResize);
-
     return () => {
-      subscription.unsubscribe();
       document.removeEventListener('click', handleDocumentClick);
       window.removeEventListener('resize', handleResize);
-      mounted = false;
     };
   }, [dropdownOpen]);
 
@@ -105,7 +75,6 @@ export default function GitHubSignIn() {
       try {
         document.cookie = 'openkpis_return_url=; Path=/; Max-Age=0; SameSite=Lax';
       } catch {}
-      setUser(null);
       window.dispatchEvent(new CustomEvent('openkpis-sign-out'));
       // Hard redirect to ensure cookies/session are applied
       window.location.replace('/');
