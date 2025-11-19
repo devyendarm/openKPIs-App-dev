@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import type { EntityKind } from '@/src/types/entities';
-import { tableFor } from '@/src/types/entities';
+import { tableFor, withTablePrefix } from '@/src/types/entities';
 import { useAuth } from '@/app/providers/AuthClientProvider';
 
 export type ItemType = 'kpi' | 'metric' | 'dimension' | 'event' | 'dashboard';
@@ -93,10 +93,11 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
     try {
       const userName = currentUser.user_metadata?.user_name || currentUser.email || 'unknown';
       const plural = pluralize(type);
+      const tableName = withTablePrefix(plural);
       const slug = formData.slug || generateSlug(formData.name);
 
       const { data: existing } = await (supabase
-        .from(plural) as any)
+        .from(tableName) as any)
         .select('id')
         .eq('slug', slug)
         .maybeSingle();
@@ -123,7 +124,7 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
       }
 
       const { data: created, error: insertError } = await (supabase
-        .from(plural) as any)
+        .from(tableName) as any)
         .insert(insertPayload)
         .select()
         .single();
@@ -134,21 +135,29 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
         return;
       }
 
+      // Trigger GitHub sync (fire and forget - don't wait for it)
       try {
         fetch(`/api/${plural}/${created.id}/sync-github`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'created' }),
-        }).catch(() => {});
-      } catch {}
+        }).catch(() => {
+          // Ignore errors - GitHub sync is non-blocking
+        });
+      } catch {
+        // Ignore errors - GitHub sync is non-blocking
+      }
 
+      // Reset saving state before redirect
+      setSaving(false);
+      
+      // Redirect to the edit page or list page
       const redirectTo = afterCreateRedirect?.({ id: created.id, slug }) ?? `/${plural}`;
       router.push(redirectTo);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to create item.';
       setError(message);
       setSaving(false);
-      return;
     }
   }
 
