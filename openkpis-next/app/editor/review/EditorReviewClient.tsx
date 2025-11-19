@@ -43,7 +43,7 @@ function formatDate(value: string | null): string {
       dateStyle: 'medium',
       timeStyle: 'short',
     }).format(date);
-  } catch (error) {
+  } catch {
     return value;
   }
 }
@@ -102,8 +102,10 @@ export default function EditorReviewClient({ initialItems, editorName }: Props) 
       } else {
         setMessage({ type: 'error', text: payload?.error || 'Failed to publish item.' });
       }
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error?.message || 'Failed to publish item.' });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to publish item.';
+      setMessage({ type: 'error', text: message });
     } finally {
       setPublishingId(null);
     }

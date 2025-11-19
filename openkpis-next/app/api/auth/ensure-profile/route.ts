@@ -1,5 +1,13 @@
+import type { PostgrestError } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { ok, error, unauthorized } from '@/lib/api/response';
+import { currentAppEnv } from '@/src/types/entities';
+
+type UserProfileRow = {
+  id: string;
+  user_role: string;
+  app_env: 'dev' | 'prod';
+};
 
 export async function POST() {
   try {
@@ -13,6 +21,8 @@ export async function POST() {
       return unauthorized();
     }
 
+    const appEnv = currentAppEnv();
+
     const githubUsername =
       (user.user_metadata?.user_name as string | undefined) ||
       (user.user_metadata?.preferred_username as string | undefined) ||
@@ -23,11 +33,12 @@ export async function POST() {
 
     const { data: existing, error: selectError } = await supabase
       .from('user_profiles')
-      .select('id, user_role')
+      .select('id, user_role, app_env')
       .eq('id', user.id)
-      .single();
+      .eq('app_env', appEnv)
+      .maybeSingle();
 
-    if (selectError && (selectError as any).code !== 'PGRST116') {
+    if (selectError && (selectError as PostgrestError).code !== 'PGRST116') {
       // If it's not "No rows" error
       return error(selectError.message, 500);
     }
@@ -38,6 +49,7 @@ export async function POST() {
         .from('user_profiles')
         .insert({
           id: user.id,
+          app_env: appEnv,
           user_role: defaultRole,
           github_username: githubUsername,
           full_name: fullName,
@@ -58,6 +70,7 @@ export async function POST() {
     const { error: updateError } = await supabase
       .from('user_profiles')
       .update({
+        app_env: appEnv,
         github_username: githubUsername,
         full_name: fullName,
         email: email,
@@ -70,9 +83,10 @@ export async function POST() {
       return error(updateError.message, 500);
     }
 
-    return ok({ created: false, role: (existing as any).user_role });
-  } catch (error: any) {
-    return error(error?.message || 'Unexpected error', 500);
+    return ok({ created: false, role: existing.user_role });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unexpected error';
+    return error(message, 500);
   }
 }
 

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { syncToGitHub } from '@/lib/services/github';
+import { withTablePrefix } from '@/src/types/entities';
+import type { KPI } from '@/lib/types/database';
+
+type KpiRow = KPI;
+type SyncAction = 'created' | 'edited';
 
 export async function POST(
   request: NextRequest,
@@ -8,15 +13,17 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const body = await request.json();
-    const { action } = body;
+    const body = (await request.json()) as { action?: SyncAction };
+    const action = body.action ?? 'edited';
 
     // Get Supabase admin client
     const supabase = createAdminClient();
 
     // Fetch KPI from Supabase
+    const kpiTable = withTablePrefix('kpis');
+
     const { data: kpi, error: kpiError } = await supabase
-      .from('kpis')
+      .from(kpiTable)
       .select('*')
       .eq('id', id)
       .single();
@@ -44,7 +51,7 @@ export async function POST(
 
     // Update Supabase record
     await supabase
-      .from('kpis')
+      .from(kpiTable)
       .update({
         github_commit_sha: result.commit_sha,
         github_pr_number: result.pr_number,
@@ -60,10 +67,11 @@ export async function POST(
       pr_url: result.pr_url,
       branch: result.branch,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to sync to GitHub';
     console.error('GitHub sync error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to sync to GitHub' },
+      { error: message },
       { status: 500 }
     );
   }

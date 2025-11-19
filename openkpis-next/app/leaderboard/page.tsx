@@ -1,43 +1,21 @@
-'use client';
+import React from 'react';
+import Image from 'next/image';
+import { createClient } from '@/lib/supabase/server';
+import { currentAppEnv } from '@/src/types/entities';
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-export default function LeaderboardPage() {
-  const [contributors, setContributors] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+export default async function LeaderboardPage() {
+  const supabase = await createClient();
+  const appEnv = currentAppEnv();
 
-  useEffect(() => {
-    loadLeaderboard();
-  }, []);
-
-  async function loadLeaderboard() {
-    try {
-      // Load user profiles with contribution stats
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .order('total_contributions', { ascending: false })
-        .limit(100);
-
-      if (!error && data) {
-        setContributors(data);
-      }
-    } catch (err) {
-      console.error('Error loading leaderboard:', err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (loading) {
-    return (
-      <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1rem' }}>
-        <p>Loading...</p>
-      </main>
-    );
-  }
+  const { data: contributors = [] } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('app_env', appEnv)
+    .order('total_contributions', { ascending: false })
+    .limit(100);
 
   return (
     <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1rem' }}>
@@ -70,7 +48,7 @@ export default function LeaderboardPage() {
             </tr>
           </thead>
           <tbody>
-            {contributors.length === 0 ? (
+            {!contributors || contributors.length === 0 ? (
               <tr>
                 <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: 'var(--ifm-color-emphasis-600)' }}>
                   No contributors yet
@@ -112,14 +90,18 @@ export default function LeaderboardPage() {
                   <td style={{ padding: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                       {contributor.avatar_url && (
-                        <img
+                        <Image
                           src={contributor.avatar_url}
-                          alt={contributor.full_name || contributor.github_username}
+                          alt={contributor.full_name || contributor.github_username || 'Contributor avatar'}
+                          width={40}
+                          height={40}
                           style={{
                             width: '40px',
                             height: '40px',
                             borderRadius: '50%',
+                            objectFit: 'cover',
                           }}
+                          unoptimized
                         />
                       )}
                       <div>

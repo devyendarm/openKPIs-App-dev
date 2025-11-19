@@ -16,7 +16,6 @@ import { useItemForm } from '@/hooks/useItemForm';
 export default function NewKPIPage() {
   const {
     user,
-    loading,
     saving,
     error,
     formData,

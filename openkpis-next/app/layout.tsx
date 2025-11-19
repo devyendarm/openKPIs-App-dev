@@ -7,7 +7,7 @@ import "./globals.css";
 import "./styles/tokens.css";
 import "./styles/components.css";
 import "./styles/layout.css";
-import { AuthProvider } from "./providers/AuthProvider";
+import AuthProvider from "./providers/AuthProvider";
 import VersionLogger from "@/components/VersionLogger";
 
 const inter = Inter({ subsets: ["latin"] });

@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import type { User } from '@supabase/supabase-js';
 import { supabase, getCurrentUser } from '@/lib/supabase';
+import { withTablePrefix } from '@/src/types/entities';
 
 interface LikeButtonProps {
   itemType: 'kpi' | 'event' | 'dimension' | 'metric' | 'dashboard';
@@ -9,71 +11,79 @@ interface LikeButtonProps {
   itemSlug: string;
 }
 
+const likesTable = withTablePrefix('likes');
+type LikeRow = {
+  id: string;
+  user_id: string | null;
+  item_type: string;
+  item_id: string;
+  item_slug: string;
+  created_at: string;
+  [key: string]: unknown;
+};
+
 export default function LikeButton({ itemType, itemId, itemSlug }: LikeButtonProps) {
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    checkUser();
+    async function checkUser() {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+    }
+    void checkUser();
   }, []);
 
   useEffect(() => {
-    if (user) {
-      checkLikeStatus();
-      fetchLikeCount();
-    } else {
-      fetchLikeCount();
-      setLoading(false);
+    let active = true;
+    async function loadStatus() {
+      setLoading(true);
+      try {
+        const { count } = await supabase
+          .from(likesTable)
+          .select('*', { count: 'exact', head: true })
+          .eq('item_type', itemType)
+          .eq('item_id', itemId);
+
+        if (active && count !== null) {
+          setLikeCount(count);
+        }
+
+        if (user) {
+          const { data, error } = await supabase
+            .from(likesTable)
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('item_type', itemType)
+            .eq('item_id', itemId)
+            .single();
+
+          if (active) {
+            setLiked(!error && Boolean(data));
+          }
+        } else if (active) {
+          setLiked(false);
+        }
+      } catch (error) {
+        if (active) {
+          console.error('Error loading like status:', error);
+          setLiked(false);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
     }
+
+    void loadStatus();
+
+    return () => {
+      active = false;
+    };
   }, [user, itemId, itemType]);
-
-  async function checkUser() {
-    const currentUser = await getCurrentUser();
-    setUser(currentUser);
-  }
-
-  async function checkLikeStatus() {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('likes')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('item_type', itemType)
-        .eq('item_id', itemId)
-        .single();
-
-      if (!error && data) {
-        setLiked(true);
-      }
-    } catch (err) {
-      console.error('Error checking like status:', err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function fetchLikeCount() {
-    try {
-      const { count, error } = await supabase
-        .from('likes')
-        .select('*', { count: 'exact', head: true })
-        .eq('item_type', itemType)
-        .eq('item_id', itemId);
-
-      if (!error && count !== null) {
-        setLikeCount(count);
-      }
-    } catch (err) {
-      console.error('Error fetching like count:', err);
-    }
-  }
 
   async function handleToggleLike() {
     if (!user) {
@@ -86,7 +96,7 @@ export default function LikeButton({ itemType, itemId, itemSlug }: LikeButtonPro
       if (liked) {
         // Unlike
         const { error } = await supabase
-          .from('likes')
+          .from(likesTable)
           .delete()
           .eq('user_id', user.id)
           .eq('item_type', itemType)
@@ -98,8 +108,8 @@ export default function LikeButton({ itemType, itemId, itemSlug }: LikeButtonPro
         }
       } else {
         // Like
-        const { error } = await (supabase
-          .from('likes') as any)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase.from(likesTable) as any)
           .insert({
             user_id: user.id,
             item_type: itemType,

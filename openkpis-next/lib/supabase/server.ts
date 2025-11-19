@@ -37,21 +37,21 @@ export async function createClient() {
       get(name: string) {
         return cookieStore.get(name)?.value;
       },
-      set(name: string, value: string, options?: any) {
+      set(name: string, value: string, options?: { path?: string; maxAge?: number; sameSite?: 'lax' | 'strict' | 'none'; httpOnly?: boolean; secure?: boolean }) {
         try {
           cookieStore.set(name, value, options);
         } catch {
           // ignore in server components
         }
       },
-      remove(name: string, options?: any) {
+      remove(name: string, options?: { path?: string; maxAge?: number; sameSite?: 'lax' | 'strict' | 'none'; httpOnly?: boolean; secure?: boolean }) {
         try {
           cookieStore.set(name, '', { ...options, maxAge: 0 });
         } catch {
           // ignore in server components
         }
       }
-    } as any,
+    },
   });
 }
 
@@ -61,6 +61,7 @@ export async function createClient() {
  */
 export function createAdminClient() {
   const config = getSupabaseServerConfig(false);
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { createClient: createSupabaseClient } = require('@supabase/supabase-js');
   return createSupabaseClient(config.url, config.key);
 }

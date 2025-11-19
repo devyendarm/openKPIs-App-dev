@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { signInWithGitHub, signOut } from '@/lib/supabase/auth';
-import { useAuth } from '@/app/providers/AuthProvider';
+import Image from 'next/image';
+import Link from 'next/link';
+import { signInWithGitHub } from '@/lib/supabase/auth';
+import { useAuth } from '@/app/providers/AuthClientProvider';
 
 export default function GitHubSignIn() {
   const { user, role } = useAuth();
@@ -14,7 +16,11 @@ export default function GitHubSignIn() {
   React.useEffect(() => {
     const handleDocumentClick = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (!dropdownRef.current?.contains(target)) {
+      // Don't close if clicking on the button or inside the dropdown
+      if (
+        !dropdownRef.current?.contains(target) && 
+        !buttonRef.current?.contains(target)
+      ) {
         setDropdownOpen(false);
       }
     };
@@ -55,16 +61,11 @@ export default function GitHubSignIn() {
   async function handleSignOut(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    setDropdownOpen(false); // Close dropdown immediately
+    
     try {
-      const { error } = await signOut();
-      if (error) {
-        console.error('Sign out error:', error);
-        alert('Failed to sign out. Please try again.');
-      }
-    } finally {
-      // Best-effort local cleanup
+      // Clear local state first
       try {
-        // clear supabase local storage tokens
         const toRemove: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i) || '';
@@ -72,12 +73,30 @@ export default function GitHubSignIn() {
         }
         toRemove.forEach((k) => localStorage.removeItem(k));
       } catch {}
+      
+      // Call sign-out API
+      const resp = await fetch('/auth/signout', { method: 'POST' });
+      if (!resp.ok) {
+        const payload = await resp.json().catch(() => ({}));
+        console.error('Sign out error:', payload);
+        alert(payload?.error || 'Failed to sign out. Please try again.');
+        return;
+      }
+      
+      // Clear cookies
       try {
         document.cookie = 'openkpis_return_url=; Path=/; Max-Age=0; SameSite=Lax';
       } catch {}
+      
+      // Dispatch sign-out event
       window.dispatchEvent(new CustomEvent('openkpis-sign-out'));
-      // Hard redirect to ensure cookies/session are applied
-      window.location.replace('/');
+      
+      // Force a hard redirect to ensure all state is cleared
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Error during sign out:', error);
+      // Still redirect even if there's an error
+      window.location.href = '/';
     }
   }
 
@@ -89,6 +108,7 @@ export default function GitHubSignIn() {
     return (
       <div ref={dropdownRef} className="auth-slot">
         <button
+          suppressHydrationWarning
           ref={buttonRef}
           onClick={toggleDropdown}
           type="button"
@@ -98,7 +118,16 @@ export default function GitHubSignIn() {
           className="user-button"
           style={dropdownOpen ? { position: 'relative', zIndex: 10001 } : undefined}
         >
-          {avatarUrl && <img src={avatarUrl} alt={userName} className="user-avatar" />}
+          {avatarUrl && (
+            <Image
+              src={avatarUrl}
+              alt={userName}
+              width={32}
+              height={32}
+              className="user-avatar"
+              unoptimized
+            />
+          )}
           <span className="user-name">{userName}</span>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="var(--ifm-font-color-base)" className="chevron">
             <path d="M6 9L1 4h10z" />
@@ -121,7 +150,16 @@ export default function GitHubSignIn() {
           >
             <div className="dropdown-header">
               <div className="dropdown-user-row">
-                {avatarUrl && <img src={avatarUrl} alt={userName} className="avatar-lg" />}
+                {avatarUrl && (
+                  <Image
+                    src={avatarUrl}
+                    alt={userName}
+                    width={64}
+                    height={64}
+                    className="avatar-lg"
+                    unoptimized
+                  />
+                )}
                 <div className="dropdown-user-info">
                   <div className="dropdown-username">
                     {userName}
@@ -132,38 +170,43 @@ export default function GitHubSignIn() {
             </div>
 
             <div className="dropdown-section">
-              {['editor', 'admin'].includes(role || '') && (
-                <a href="/editor/review" role="menuitem" className="dropdown-item">
+              {['editor', 'admin'].includes((role || '').toLowerCase()) && (
+                <Link href="/editor/review" prefetch={false} role="menuitem" className="dropdown-item">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M2 2.5A1.5 1.5 0 013.5 1h9A1.5 1.5 0 0114 2.5V4H2V2.5zM2 5h12v8.5A1.5 1.5 0 0112.5 15h-9A1.5 1.5 0 012 13.5V5zm3 2a.5.5 0 000 1h6a.5.5 0 000-1H5z" />
                   </svg>
                   <span>Editor Review</span>
-                </a>
+                </Link>
               )}
-              <a href="/kpis/new" role="menuitem" className="dropdown-item">
+              <Link href="/kpis/new" prefetch={false} role="menuitem" className="dropdown-item">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M8 0a1 1 0 011 1v6h6a1 1 0 110 2H9v6a1 1 0 11-2 0V9H1a1 1 0 110-2h6V1a1 1 0 011-1z" />
                 </svg>
                 <span>Create New KPI</span>
-              </a>
-              <a href="/myprofile" role="menuitem" className="dropdown-item">
+              </Link>
+              <Link href="/myprofile" prefetch={false} role="menuitem" className="dropdown-item">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M8 8a3 3 0 100-6 3 3 0 000 6z" />
                   <path fillRule="evenodd" d="M14 14s-1-4-6-4-6 4-6 4 2 2 6 2 6-2 6-2z" />
                 </svg>
                 <span>My Profile</span>
-              </a>
-              <a href="/analysis" role="menuitem" className="dropdown-item">
+              </Link>
+              <Link href="/analysis" prefetch={false} role="menuitem" className="dropdown-item">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M2 2a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V2zm2 1a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V4a1 1 0 00-1-1H4z" />
                   <path d="M6 6a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3A.5.5 0 016 6zM6 9a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3A.5.5 0 016 9z" />
                 </svg>
                 <span>My Analysis</span>
-              </a>
+              </Link>
             </div>
 
             <div className="dropdown-separator">
-              <button onClick={handleSignOut} className="dropdown-item dropdown-item--danger">
+              <button 
+                onClick={handleSignOut} 
+                onMouseDown={(e) => e.preventDefault()} // Prevent dropdown from closing
+                className="dropdown-item dropdown-item--danger"
+                type="button"
+              >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M3 2a1 1 0 00-1 1v10a1 1 0 001 1h5a1 1 0 100-2H4V4h4a1 1 0 100-2H3zm9.707 4.293a1 1 0 00-1.414 1.414L12.586 9H7a1 1 0 100 2h5.586l-1.293 1.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3z" />
                 </svg>

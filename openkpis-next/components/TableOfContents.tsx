@@ -75,18 +75,17 @@ export default function TableOfContents({ headings }: TableOfContentsProps) {
     );
 
     // Re-observe headings after extraction
-    let timeoutId2: NodeJS.Timeout;
     const setupObserver = () => {
       const headingElements = document.querySelectorAll('article h2, article h3');
       headingElements.forEach((heading) => observer.observe(heading));
     };
     
-    timeoutId2 = setTimeout(setupObserver, 200);
+    const observerTimeout = setTimeout(setupObserver, 200);
 
     return () => {
       observer.disconnect();
       clearTimeout(timeoutId);
-      if (timeoutId2) clearTimeout(timeoutId2);
+      clearTimeout(observerTimeout);
     };
   }, [headings]);
 

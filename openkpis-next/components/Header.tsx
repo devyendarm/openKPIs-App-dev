@@ -1,58 +1,39 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 import GitHubSignIn from './GitHubSignIn';
-import type { User } from '@supabase/supabase-js';
-import { getCurrentUser } from '@/lib/supabase/auth';
-import { supabase } from '@/lib/supabase';
-import { getUserRoleClient } from '@/lib/roles/client';
 
 export default function Header() {
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<string | null>(null);
-
-  const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && searchQuery.trim()) {
-      window.location.href = `/search?q=${encodeURIComponent(searchQuery)}`;
-    }
-  };
+  const [navigating, setNavigating] = useState<string | null>(null);
+  
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && searchQuery.trim()) {
-      window.location.href = `/search?q=${encodeURIComponent(searchQuery)}`;
+    if (e.key === 'Enter' && searchQuery.trim() && !navigating) {
+      setNavigating('/search');
+      router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
     }
   };
-
-  useEffect(() => {
-    let mounted = true;
-    async function initUser() {
-      const current = await getCurrentUser();
-      if (!mounted) return;
-      setUser(current);
-      if (current) setRole(await getUserRoleClient());
-      else setRole(null);
+  
+  const handleNavClick = useCallback((href: string, e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (navigating) {
+      e.preventDefault();
+      return;
     }
-    initUser();
-    const handler = (e: any) => {
-      const nextUser = e?.detail?.user ?? null;
-      setUser(nextUser);
-      if (!nextUser) setRole(null);
-      else getUserRoleClient().then((r) => setRole(r));
-    };
-    window.addEventListener('openkpis-auth-change', handler as EventListener);
-    return () => {
-      mounted = false;
-      window.removeEventListener('openkpis-auth-change', handler as EventListener);
-    };
-  }, []);
+    setNavigating(href);
+    // Reset after a short delay to allow navigation
+    setTimeout(() => setNavigating(null), 1000);
+  }, [navigating]);
 
   return (
     <header className="site-header">
       <div className="header-inner">
         {/* Logo & Brand */}
-        <a href="/" className="brand-link">
+        <Link href="/" prefetch={false} className="brand-link">
           {/* Uptrend Chart Icon */}
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="brand-icon">
             <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
@@ -61,25 +42,50 @@ export default function Header() {
           <span className="brand-title">
             OpenKPIs
           </span>
-        </a>
+        </Link>
 
         {/* Desktop Navigation */}
         <nav className="desktop-nav">
-          <a href="/kpis" className="nav-link">
+          <Link 
+            href="/kpis" 
+            prefetch={false} 
+            className={`nav-link${navigating === '/kpis' ? ' nav-link--loading' : ''}`}
+            onClick={(e) => handleNavClick('/kpis', e)}
+          >
             KPIs
-          </a>
-          <a href="/dimensions" className="nav-link">
+          </Link>
+          <Link 
+            href="/dimensions" 
+            prefetch={false} 
+            className={`nav-link${navigating === '/dimensions' ? ' nav-link--loading' : ''}`}
+            onClick={(e) => handleNavClick('/dimensions', e)}
+          >
             Dimensions
-          </a>
-          <a href="/events" className="nav-link">
+          </Link>
+          <Link 
+            href="/events" 
+            prefetch={false} 
+            className={`nav-link${navigating === '/events' ? ' nav-link--loading' : ''}`}
+            onClick={(e) => handleNavClick('/events', e)}
+          >
             Events
-          </a>
-          <a href="/metrics" className="nav-link">
+          </Link>
+          <Link 
+            href="/metrics" 
+            prefetch={false} 
+            className={`nav-link${navigating === '/metrics' ? ' nav-link--loading' : ''}`}
+            onClick={(e) => handleNavClick('/metrics', e)}
+          >
             Metrics
-          </a>
-          <a href="/dashboards" className="nav-link">
+          </Link>
+          <Link 
+            href="/dashboards" 
+            prefetch={false} 
+            className={`nav-link${navigating === '/dashboards' ? ' nav-link--loading' : ''}`}
+            onClick={(e) => handleNavClick('/dashboards', e)}
+          >
             Dashboards
-          </a>
+          </Link>
 
           {/* Dashboard link removed from header nav */}
 
@@ -87,13 +93,18 @@ export default function Header() {
 
           {/* Editor link moved to GitHubSignIn dropdown */}
 
-          <a href="/ai-analyst" className="nav-link nav-link--icon">
+          <Link 
+            href="/ai-analyst" 
+            prefetch={false} 
+            className={`nav-link nav-link--icon${navigating === '/ai-analyst' ? ' nav-link--loading' : ''}`}
+            onClick={(e) => handleNavClick('/ai-analyst', e)}
+          >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 2L2 7l10 5 10-5-10-5z" />
               <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
             </svg>
             AI Analyst
-          </a>
+          </Link>
 
           {/* Industries and Categories removed for now */}
           <input
@@ -111,12 +122,18 @@ export default function Header() {
           />
         </nav>
 
-        {/* Right Side: Search, GitHub Sign-In, GitHub Link */}
+        {/* Right Side: Leaderboard, GitHub Sign-In, GitHub Link */}
         <div className="right-actions">
-          {/* Search Input */}
-          
+          {/* Leaderboard link */}
+          <Link 
+            href="/leaderboard" 
+            prefetch={false} 
+            className={`nav-link${navigating === '/leaderboard' ? ' nav-link--loading' : ''}`}
+            onClick={(e) => handleNavClick('/leaderboard', e)}
+          >
+            Leaderboard
+          </Link>
 
-          {/* GitHub Sign-In */}
           <div className="desktop-auth">
             <GitHubSignIn />
           </div>
@@ -141,21 +158,54 @@ export default function Header() {
       {mobileMenuOpen && (
         <div className="mobile-menu">
           <nav className="mobile-menu-nav">
-            <a href="/kpis" className="mobile-menu-link">
+            <Link 
+              href="/kpis" 
+              prefetch={false} 
+              className="mobile-menu-link"
+              onClick={() => setMobileMenuOpen(false)}
+            >
               KPIs
-            </a>
-            <a href="/dimensions" className="mobile-menu-link">
+            </Link>
+            <Link 
+              href="/dimensions" 
+              prefetch={false} 
+              className="mobile-menu-link"
+              onClick={() => setMobileMenuOpen(false)}
+            >
               Dimensions
-            </a>
-            <a href="/events" className="mobile-menu-link">
+            </Link>
+            <Link 
+              href="/events" 
+              prefetch={false} 
+              className="mobile-menu-link"
+              onClick={() => setMobileMenuOpen(false)}
+            >
               Events
-            </a>
-            <a href="/metrics" className="mobile-menu-link">
+            </Link>
+            <Link 
+              href="/metrics" 
+              prefetch={false} 
+              className="mobile-menu-link"
+              onClick={() => setMobileMenuOpen(false)}
+            >
               Metrics
-            </a>
-            <a href="/dashboards" className="mobile-menu-link">
+            </Link>
+            <Link 
+              href="/dashboards" 
+              prefetch={false} 
+              className="mobile-menu-link"
+              onClick={() => setMobileMenuOpen(false)}
+            >
               Dashboards
-            </a>
+            </Link>
+            <Link 
+              href="/leaderboard" 
+              prefetch={false} 
+              className="mobile-menu-link"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Leaderboard
+            </Link>
             {/* Dashboard link removed from mobile menu */}
             {/* Profile link removed from mobile menu; available in user dropdown */}
             {/* Editor link moved to GitHubSignIn dropdown */}

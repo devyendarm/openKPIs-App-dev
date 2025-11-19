@@ -1,5 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { withTablePrefix } from '@/src/types/entities';
+
+type AnalysisRow = {
+  id: string;
+  user_id: string;
+  selected_insights?: string[] | null;
+  dashboard_ids?: string[] | null;
+};
+
+type UserInsightRow = {
+  insight_id: string;
+  user_id: string;
+  [key: string]: unknown;
+};
+
+type DashboardRow = {
+  id: string;
+  [key: string]: unknown;
+};
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,7 +34,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {
       const { data: { session } } = await supabase.auth.getSession();
@@ -37,7 +56,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch specific analysis (RLS will ensure user can only access their own)
     const { data: analysis, error: analysisError } = await supabase
-      .from('user_analyses')
+      .from(withTablePrefix('user_analyses'))
       .select('*')
       .eq('id', analysisId)
       .eq('user_id', userId)
@@ -59,10 +78,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch related insights if analysis has selected_insights
-    let insights: any[] = [];
+    let insights: UserInsightRow[] = [];
     if (analysis.selected_insights && analysis.selected_insights.length > 0) {
       const { data: savedInsights } = await supabase
-        .from('user_insights')
+        .from(withTablePrefix('user_insights'))
         .select('*')
         .eq('user_id', userId)
         .in('insight_id', analysis.selected_insights);
@@ -71,10 +90,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch related dashboards if analysis has dashboard_ids
-    let dashboards: any[] = [];
+    let dashboards: DashboardRow[] = [];
     if (analysis.dashboard_ids && analysis.dashboard_ids.length > 0) {
       const { data: savedDashboards } = await supabase
-        .from('dashboards')
+        .from(withTablePrefix('dashboards'))
         .select('*')
         .in('id', analysis.dashboard_ids);
       
@@ -87,10 +106,11 @@ export async function GET(request: NextRequest) {
       insights,
       dashboards,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch analysis';
     console.error('[Get Saved Analysis] Error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch analysis' },
+      { error: message },
       { status: 500 }
     );
   }

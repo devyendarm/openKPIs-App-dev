@@ -24,9 +24,9 @@ export interface Metric extends BaseEntity {
   formula?: string | null;
 }
 
-export interface Dimension extends BaseEntity {}
-export interface EventEntity extends BaseEntity {}
-export interface Dashboard extends BaseEntity {}
+export type Dimension = BaseEntity;
+export type EventEntity = BaseEntity;
+export type Dashboard = BaseEntity;
 
 export type AnyEntity = Kpi | Metric | Dimension | EventEntity | Dashboard;
 
@@ -43,6 +43,31 @@ export function tableFor(kind: EntityKind): string {
     case 'dashboard':
       return 'dashboards';
   }
+}
+
+export function resolveTablePrefix(): string {
+  const env = (process.env.NEXT_PUBLIC_APP_ENV || '').toLowerCase();
+  if (env.startsWith('prod')) return 'prod_';
+  if (env.startsWith('dev')) return 'dev_';
+  return '';
+}
+
+/**
+ * Logical application environment label used for shared tables like user_profiles.
+ * We normalize everything to 'dev' or 'prod' so code can do simple equality checks.
+ */
+export function currentAppEnv(): 'dev' | 'prod' {
+  const raw = (process.env.NEXT_PUBLIC_APP_ENV || '').toLowerCase();
+  if (raw.startsWith('prod')) return 'prod';
+  return 'dev';
+}
+
+export function sqlTableFor(kind: EntityKind): string {
+  return `${resolveTablePrefix()}${tableFor(kind)}`;
+}
+
+export function withTablePrefix(table: string): string {
+  return `${resolveTablePrefix()}${table}`;
 }
 
 

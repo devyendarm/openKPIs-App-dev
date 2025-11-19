@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 export default function NotFound() {
 	return (
 		<main style={{ maxWidth: '768px', margin: '0 auto', padding: '3rem 1rem', textAlign: 'center' }}>
@@ -7,10 +9,11 @@ export default function NotFound() {
 			<p style={{ color: 'var(--ifm-color-emphasis-700)', marginBottom: '1.25rem' }}>
 				The page you’re looking for doesn’t exist or was moved.
 			</p>
-			<a href="/" className="btn btn-primary">Go Home</a>
+			<Link href="/" prefetch={false} className="btn btn-primary">Go Home</Link>
 		</main>
 	);
 }
+
 
 
 

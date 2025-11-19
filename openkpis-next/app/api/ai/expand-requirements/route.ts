@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAISuggestions } from '@/lib/services/ai';
 
 // Increase timeout for requirements expansion (up to 200 seconds)
 export const maxDuration = 200;
 
 // Helper to call OpenAI directly (similar to callOpenAI but exported)
+type ChatMessage = {
+  role: 'system' | 'user';
+  content: string;
+};
+
+type ChatCompletionRequest = {
+  model: string;
+  messages: ChatMessage[];
+  max_completion_tokens?: number;
+  max_tokens?: number;
+  temperature?: number;
+};
+
 async function callOpenAIDirect(prompt: string, systemPrompt: string = 'Return ONLY valid JSON, no markdown, no explanations.'): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -20,7 +32,7 @@ async function callOpenAIDirect(prompt: string, systemPrompt: string = 'Return O
                      (model.startsWith('gpt-4') && !model.includes('turbo') && !model.includes('gpt-4o'));
   const isNewModel = !isOldModel;
   
-  const requestBody: any = {
+  const requestBody: ChatCompletionRequest = {
     model: model,
     messages: [
       { role: 'system', content: systemPrompt },
@@ -63,10 +75,13 @@ async function callOpenAIDirect(prompt: string, systemPrompt: string = 'Return O
     
     const data = await response.json();
     return data.choices[0]?.message?.content || '';
-  } catch (error: any) {
+  } catch (error: unknown) {
     clearTimeout(timeoutId);
     // Handle timeout specifically
-    if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+    if (
+      error instanceof Error &&
+      (error.name === 'AbortError' || error.message.includes('aborted'))
+    ) {
       console.error('[Expand Requirements] Request timeout after', timeoutMs, 'ms');
       throw new Error(`Request timed out after ${timeoutMs / 1000} seconds. The AI model may be taking longer than expected. Please try again with shorter requirements or try a different model.`);
     }
@@ -76,7 +91,11 @@ async function callOpenAIDirect(prompt: string, systemPrompt: string = 'Return O
 
 export async function POST(request: NextRequest) {
   try {
-    const { requirements, analyticsSolution, platforms, kpiCount } = await request.json();
+    const { requirements, analyticsSolution, platforms } = (await request.json()) as {
+      requirements: string;
+      analyticsSolution: string;
+      platforms?: string[];
+    };
 
     if (!requirements || !analyticsSolution) {
       return NextResponse.json(
@@ -124,10 +143,11 @@ Select relevant scope items, breakdowns, and constraints based on the requiremen
 
     const parsed = JSON.parse(jsonContent);
     return NextResponse.json(parsed);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to expand requirements';
     console.error('[API] Expand requirements error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to expand requirements' },
+      { error: message },
       { status: 500 }
     );
   }

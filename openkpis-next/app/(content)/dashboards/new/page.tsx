@@ -14,7 +14,7 @@ import SubmitBar from '@/components/forms/SubmitBar';
 import { useItemForm } from '@/hooks/useItemForm';
 
 export default function NewDashboardPage() {
-  const { user, loading, saving, error, formData, setField, handleNameChange, handleSlugChange, handleSubmit } = useItemForm({
+  const { user, saving, error, formData, setField, handleNameChange, handleSlugChange, handleSubmit } = useItemForm({
     type: 'dashboard',
     afterCreateRedirect: ({ slug }) => `/dashboards/${slug}/edit`,
   });

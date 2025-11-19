@@ -16,6 +16,60 @@ function getSupabaseConfig() {
 
 let supabaseClient: ReturnType<typeof createBrowserClient> | null = null;
 
+function syncSessionFromCookie() {
+  if (typeof window === 'undefined') return;
+  const { url } = getSupabaseConfig();
+  let projectRef: string | null = null;
+  try {
+    const parsed = new URL(url);
+    projectRef = parsed.host.split('.')[0] || null;
+  } catch {
+    return;
+  }
+  if (!projectRef) return;
+
+  const storageKey = `sb-${projectRef}-auth-token`;
+  const existing = window.localStorage.getItem(storageKey);
+  if (existing) {
+    try {
+      JSON.parse(existing);
+      return; // already in expected JSON format
+    } catch {
+      // fall through to attempt to repair from cookie
+    }
+  }
+
+  const cookieMatch = document.cookie
+    .split('; ')
+    .find((row) => row.startsWith(`${storageKey}=`));
+  if (!cookieMatch) return;
+
+  const rawValue = decodeURIComponent(cookieMatch.split('=')[1] || '');
+  let parsedJson: string | null = null;
+
+  if (rawValue.startsWith('base64-')) {
+    const base64Payload = rawValue.slice('base64-'.length);
+    try {
+      const decoded = atob(base64Payload);
+      JSON.parse(decoded);
+      parsedJson = decoded;
+    } catch {
+      // ignore – decoding failed
+    }
+  } else {
+    try {
+      JSON.parse(rawValue);
+      parsedJson = rawValue;
+    } catch {
+      // ignore – not valid JSON
+    }
+  }
+
+  if (parsedJson) {
+    window.localStorage.setItem(storageKey, parsedJson);
+  }
+}
+
 function getSupabaseClient() {
   if (typeof window === 'undefined') {
     throw new Error('Supabase client can only be used in client components');
@@ -23,6 +77,7 @@ function getSupabaseClient() {
 
   if (!supabaseClient) {
     const { url, key } = getSupabaseConfig();
+    syncSessionFromCookie();
     supabaseClient = createBrowserClient(url, key);
   }
 

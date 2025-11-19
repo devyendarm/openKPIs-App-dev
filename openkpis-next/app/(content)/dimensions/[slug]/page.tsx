@@ -1,62 +1,26 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import React from 'react';
 import Link from 'next/link';
-import { supabase, getCurrentUser } from '@/lib/supabase';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import GiscusComments from '@/components/GiscusComments';
 import Sidebar from '@/components/Sidebar';
 import TableOfContents from '@/components/TableOfContents';
 import LikeButton from '@/components/LikeButton';
 import AddToAnalysisButton from '@/components/AddToAnalysisButton';
+import { fetchDimensionBySlug } from '@/lib/server/dimensions';
+import { collectUserIdentifiers } from '@/lib/server/entities';
 
-export default function DimensionDetailPage() {
-  const params = useParams();
-  const slug = params?.slug as string;
-  const [dimension, setDimension] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
-  const [canEdit, setCanEdit] = useState(false);
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-  useEffect(() => {
-    if (slug) loadData();
-  }, [slug]);
+export default async function DimensionDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  async function loadData() {
-    setLoading(true);
-    try {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-      const userName = currentUser?.user_metadata?.user_name || currentUser?.email;
-
-      const { data, error } = await supabase
-        .from('dimensions')
-        .select('*')
-        .eq('slug', slug)
-        .single();
-
-      if (error) {
-        setDimension(null);
-        return;
-      }
-
-      if (data) {
-        setDimension(data);
-        if (userName) {
-          setCanEdit((data as any).created_by === userName || (data as any).status === 'draft');
-        }
-      }
-    } catch (err) {
-      console.error('Error:', err);
-      setDimension(null);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (loading) {
-    return <main style={{ padding: '2rem', textAlign: 'center' }}><p>Loading...</p></main>;
-  }
+  const admin = createAdminClient();
+  const dimension = await fetchDimensionBySlug(admin, slug);
 
   if (!dimension) {
     return (
@@ -67,22 +31,36 @@ export default function DimensionDetailPage() {
     );
   }
 
+  const identifiers = collectUserIdentifiers(user);
+  const isOwner = dimension.created_by ? identifiers.includes(dimension.created_by) : false;
+  const isVisible = dimension.status === 'published' || isOwner;
+
+  if (!isVisible) {
+    return (
+      <main style={{ padding: '2rem', textAlign: 'center' }}>
+        <h1>Dimension Not Available</h1>
+        <p style={{ color: 'var(--ifm-color-emphasis-600)' }}>
+          This dimension is still in draft. Sign in with the account that created it to view the content.
+        </p>
+        <Link href="/dimensions" style={{ color: 'var(--ifm-color-primary)' }}>← Back to Dimensions</Link>
+      </main>
+    );
+  }
+
+  const canEdit = isOwner && dimension.status === 'draft';
+
   return (
     <main style={{ maxWidth: '100%', margin: '0 auto', padding: '2rem 1rem', overflowX: 'hidden' }}>
-      {/* Three Column Layout: Left Sidebar | Main Content | Right TOC */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'minmax(200px, 250px) minmax(0, 1fr) minmax(200px, 280px)', 
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(200px, 250px) minmax(0, 1fr) minmax(200px, 280px)',
         gap: '1.5rem',
         width: '100%',
         maxWidth: '100%',
       }}>
-        {/* Left Sidebar - Full Height, All Dimensions Navigation */}
         <Sidebar section="dimensions" />
 
-        {/* Main Content - Middle Column */}
         <article style={{ minWidth: 0, overflowWrap: 'break-word', wordWrap: 'break-word' }}>
-          {/* Return Button and Header */}
           <div style={{
             marginBottom: '2rem',
             paddingBottom: '1.5rem',
@@ -115,17 +93,13 @@ export default function DimensionDetailPage() {
                 )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                {dimension && (
-                  <>
-                    <LikeButton itemType="dimension" itemId={dimension.id} itemSlug={dimension.slug} />
-                    <AddToAnalysisButton
-                      itemType="dimension"
-                      itemId={dimension.id}
-                      itemSlug={dimension.slug}
-                      itemName={dimension.name}
-                    />
-                  </>
-                )}
+                <LikeButton itemType="dimension" itemId={dimension.id} itemSlug={dimension.slug} />
+                <AddToAnalysisButton
+                  itemType="dimension"
+                  itemId={dimension.id}
+                  itemSlug={dimension.slug}
+                  itemName={dimension.name}
+                />
                 {canEdit && (
                   <Link
                     href={`/dimensions/${slug}/edit`}
@@ -148,28 +122,28 @@ export default function DimensionDetailPage() {
             <h2 id="dimension-details" style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem' }}>Dimension Details</h2>
             <div style={{ backgroundColor: 'var(--ifm-color-emphasis-50)', borderRadius: '12px', padding: '2rem' }}>
               {dimension.category && <div style={{ marginBottom: '1rem' }}><strong>Category:</strong> {dimension.category}</div>}
-              {dimension.tags && dimension.tags.length > 0 && (
+              {dimension.tags.length > 0 && (
                 <div style={{ marginBottom: '1rem' }}>
                   <strong>Tags:</strong>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
-                    {dimension.tags.map((tag: string) => (
+                    {dimension.tags.map((tag) => (
                       <span key={tag} style={{ padding: '0.25rem 0.75rem', backgroundColor: 'var(--ifm-color-primary)', color: 'white', borderRadius: '4px', fontSize: '0.875rem' }}>{tag}</span>
                     ))}
                   </div>
                 </div>
               )}
               <div style={{ marginBottom: '0.75rem' }}><strong>Created by:</strong> {dimension.created_by}</div>
-              <div><strong>Created at:</strong> {new Date(dimension.created_at).toLocaleDateString()}</div>
+              {dimension.created_at && (
+                <div><strong>Created at:</strong> {new Date(dimension.created_at).toLocaleDateString()}</div>
+              )}
             </div>
           </section>
 
-          {/* Giscus Comments */}
           <div style={{ marginTop: '3rem' }}>
             <GiscusComments term={slug} category="dimensions" />
           </div>
         </article>
 
-        {/* Right Rail TOC */}
         <TableOfContents />
       </div>
     </main>

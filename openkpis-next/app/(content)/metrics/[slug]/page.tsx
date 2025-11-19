@@ -1,44 +1,24 @@
-'use client';
-
-import React, { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import React from 'react';
 import Link from 'next/link';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import LikeButton from '@/components/LikeButton';
 import AddToAnalysisButton from '@/components/AddToAnalysisButton';
-import { supabase } from '@/lib/supabase';
+import { STATUS } from '@/lib/supabase/auth';
+import { fetchMetricBySlug } from '@/lib/server/metrics';
+import { collectUserIdentifiers } from '@/lib/server/entities';
 
-export default function MetricDetailPage() {
-  const params = useParams();
-  const slug = params?.slug as string;
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-  const [metric, setMetric] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+export default async function MetricDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  useEffect(() => {
-    if (slug) {
-      setLoading(true);
-      (async () => {
-        try {
-          const { data } = await supabase
-        .from('metrics')
-        .select('*')
-        .eq('slug', slug)
-            .single();
-          setMetric(data);
-        } finally {
-          setLoading(false);
-        }
-      })();
-    }
-  }, [slug]);
-
-  if (loading) {
-    return (
-      <main style={{ padding: '2rem', textAlign: 'center' }}>
-        <p>Loading...</p>
-      </main>
-    );
-  }
+  const admin = createAdminClient();
+  const metric = await fetchMetricBySlug(admin, slug);
 
   if (!metric) {
     return (
@@ -51,45 +31,118 @@ export default function MetricDetailPage() {
     );
   }
 
+  const identifiers = collectUserIdentifiers(user);
+  const isOwner = metric.created_by ? identifiers.includes(metric.created_by) : false;
+  const isVisible = metric.status === STATUS.PUBLISHED || isOwner;
+
+  if (!isVisible) {
+    return (
+      <main style={{ padding: '2rem', textAlign: 'center' }}>
+        <h1>Metric not available</h1>
+        <p style={{ color: 'var(--ifm-color-emphasis-600)' }}>
+          This metric is still in draft. Sign in with the account that created it to view the content.
+        </p>
+        <Link href="/metrics" style={{ color: 'var(--ifm-color-primary)' }}>
+          ← Back to Metrics
+        </Link>
+      </main>
+    );
+  }
+
+  const canEdit = isOwner && metric.status === STATUS.DRAFT;
+
   return (
     <main style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem' }}>
       <Link href="/metrics" style={{ color: 'var(--ifm-color-primary)', textDecoration: 'none', fontSize: '0.875rem' }}>
         ← Back to Metrics
       </Link>
-      <h1 style={{ fontSize: '2rem', fontWeight: 600, marginTop: '0.5rem' }}>{metric.name}</h1>
-      {metric.description && <p style={{ color: 'var(--ifm-color-emphasis-700)' }}>{metric.description}</p>}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
-        {metric && (
-          <>
-            <LikeButton itemType="metric" itemId={metric.id} itemSlug={metric.slug} />
-            <AddToAnalysisButton
-              itemType="metric"
-              itemId={metric.id}
-              itemSlug={metric.slug}
-              itemName={metric.name}
-            />
-          </>
-        )}
-      </div>
-      {metric.formula && (
-        <div style={{ background: 'var(--ifm-color-emphasis-50)', border: '1px solid var(--ifm-color-emphasis-200)', borderRadius: 8, padding: '1rem', margin: '1rem 0' }}>
-          <strong>Formula:</strong>
-          <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{metric.formula}</pre>
+      <header style={{ display: 'flex', gap: '1rem', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '0.5rem' }}>
+        <div style={{ flex: 1 }}>
+          <h1 style={{ fontSize: '2rem', fontWeight: 600, marginBottom: '0.5rem' }}>{metric.name}</h1>
+          {metric.description && (
+            <p style={{ color: 'var(--ifm-color-emphasis-700)', lineHeight: 1.6 }}>{metric.description}</p>
+          )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem' }}>
+            {metric.category ? (
+              <span style={{ padding: '0.25rem 0.75rem', backgroundColor: 'var(--ifm-color-emphasis-100)', borderRadius: 999, fontSize: '0.75rem', fontWeight: 500 }}>
+                {metric.category}
+              </span>
+            ) : null}
+            {metric.tags.map((tag) => (
+              <span
+                key={tag}
+                style={{
+                  padding: '0.25rem 0.75rem',
+                  backgroundColor: 'var(--ifm-color-emphasis-100)',
+                  borderRadius: 999,
+                  fontSize: '0.75rem',
+                  fontWeight: 500,
+                }}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
         </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <LikeButton itemType="metric" itemId={metric.id} itemSlug={metric.slug} />
+          <AddToAnalysisButton itemType="metric" itemId={metric.id} itemSlug={metric.slug} itemName={metric.name} />
+          {canEdit && (
+            <Link
+              href={`/metrics/${metric.slug}/edit`}
+              style={{
+                padding: '0.75rem 1.5rem',
+                backgroundColor: 'var(--ifm-color-primary)',
+                color: '#fff',
+                textDecoration: 'none',
+                borderRadius: '8px',
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Edit
+            </Link>
+          )}
+        </div>
+      </header>
+
+      {metric.formula && (
+        <section style={{ marginTop: '1.5rem' }}>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.75rem' }}>Formula</h2>
+          <div style={{ background: 'var(--ifm-color-emphasis-50)', border: '1px solid var(--ifm-color-emphasis-200)', borderRadius: 8, padding: '1rem' }}>
+            <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontSize: '0.9rem', lineHeight: 1.6 }}>{metric.formula}</pre>
+          </div>
+        </section>
       )}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
-        {metric.category && (
-          <span style={{ padding: '0.25rem 0.75rem', backgroundColor: 'var(--ifm-color-emphasis-100)', borderRadius: 999, fontSize: '0.75rem' }}>
-            {metric.category}
-          </span>
-        )}
-        {(metric.tags || []).map((t: string) => (
-          <span key={t} style={{ padding: '0.25rem 0.75rem', backgroundColor: 'var(--ifm-color-emphasis-100)', borderRadius: 999, fontSize: '0.75rem' }}>
-            {t}
-          </span>
-        ))}
-      </div>
+
+      <section style={{ marginTop: '2rem', display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+        {metric.created_by ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ifm-color-emphasis-500)' }}>
+              Created by
+            </span>
+            <span style={{ fontSize: '0.95rem', color: 'var(--ifm-color-emphasis-800)' }}>{metric.created_by}</span>
+          </div>
+        ) : null}
+        {metric.created_at ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ifm-color-emphasis-500)' }}>
+              Created on
+            </span>
+            <span style={{ fontSize: '0.95rem', color: 'var(--ifm-color-emphasis-800)' }}>{new Date(metric.created_at).toLocaleDateString()}</span>
+          </div>
+        ) : null}
+        {metric.status ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ifm-color-emphasis-500)' }}>
+              Status
+            </span>
+            <span style={{ fontSize: '0.95rem', color: 'var(--ifm-color-emphasis-800)' }}>{metric.status.toUpperCase()}</span>
+          </div>
+        ) : null}
+      </section>
     </main>
   );
 }

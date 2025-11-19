@@ -15,9 +15,22 @@ const GITHUB_CONTENT_REPO = (
   'openKPIs-Content'
 );
 
+interface EntityRecord {
+  id?: string;
+  slug?: string;
+  name: string;
+  description?: string;
+  category?: string;
+  tags?: string[] | string;
+  status?: string;
+  created_by?: string;
+  created_at?: string;
+  formula?: string;
+}
+
 export interface GitHubSyncParams {
   tableName: 'kpis' | 'events' | 'dimensions' | 'metrics' | 'dashboards';
-  record: any;
+  record: EntityRecord;
   action: 'created' | 'edited';
   userLogin: string;
   userName?: string;
@@ -46,7 +59,7 @@ export async function syncToGitHub(params: GitHubSyncParams): Promise<{
     const installationId = parseInt(installationIdStr, 10);
 
     const octokit = new Octokit({
-      authStrategy: createAppAuth as any,
+      authStrategy: createAppAuth,
       auth: {
         appId: Number(appId),
         privateKey,
@@ -71,7 +84,7 @@ export async function syncToGitHub(params: GitHubSyncParams): Promise<{
       owner: GITHUB_OWNER,
       repo: GITHUB_CONTENT_REPO,
       ref: `refs/heads/${branchName}`,
-      sha: (mainRef as any).object.sha,
+      sha: mainRef.object.sha,
     });
 
     // Check if file exists
@@ -83,8 +96,8 @@ export async function syncToGitHub(params: GitHubSyncParams): Promise<{
         path: filePath,
         ref: branchName,
       });
-      if ('sha' in (existingFile as any)) {
-        existingFileSha = (existingFile as any).sha;
+      if (existingFile && typeof existingFile === 'object' && 'sha' in existingFile) {
+        existingFileSha = existingFile.sha as string;
       }
     } catch {
       // File doesn't exist – continue
@@ -126,17 +139,18 @@ export async function syncToGitHub(params: GitHubSyncParams): Promise<{
 
     return {
       success: true,
-      commit_sha: (commitData as any).commit.sha,
+      commit_sha: commitData.commit.sha,
       pr_number: prData.number,
       pr_url: prData.html_url,
       branch: branchName,
       file_path: filePath,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('GitHub sync error:', error);
+    const err = error as { message?: string };
     return {
       success: false,
-      error: error.message || 'Failed to sync to GitHub',
+      error: err.message || 'Failed to sync to GitHub',
     };
   }
 }
@@ -176,7 +190,7 @@ function resolvePrivateKey(): string | undefined {
   return undefined;
 }
 
-function generateYAML(tableName: string, record: any): string {
+function generateYAML(tableName: string, record: EntityRecord): string {
   const timestamp = new Date().toISOString();
   
   if (tableName === 'kpis') {
@@ -188,7 +202,7 @@ KPI Name: ${record.name}
 ${record.formula ? `Formula: ${record.formula}` : ''}
 ${record.description ? `Description: |\n  ${record.description.split('\n').join('\n  ')}` : ''}
 ${record.category ? `Category: ${record.category}` : ''}
-${record.tags && record.tags.length > 0 ? `Tags: [${record.tags.join(', ')}]` : ''}
+${record.tags && Array.isArray(record.tags) && record.tags.length > 0 ? `Tags: [${record.tags.join(', ')}]` : ''}
 Status: ${record.status}
 Contributed By: ${record.created_by}
 Created At: ${record.created_at}
@@ -203,7 +217,7 @@ Created At: ${record.created_at}
 Event Name: ${record.name}
 ${record.description ? `Description: |\n  ${record.description.split('\n').join('\n  ')}` : ''}
 ${record.category ? `Category: ${record.category}` : ''}
-${record.tags && record.tags.length > 0 ? `Tags: [${record.tags.join(', ')}]` : ''}
+${record.tags && Array.isArray(record.tags) && record.tags.length > 0 ? `Tags: [${record.tags.join(', ')}]` : ''}
 Status: ${record.status}
 Contributed By: ${record.created_by}
 Created At: ${record.created_at}
@@ -218,7 +232,7 @@ Created At: ${record.created_at}
 Dimension Name: ${record.name}
 ${record.description ? `Description: |\n  ${record.description.split('\n').join('\n  ')}` : ''}
 ${record.category ? `Category: ${record.category}` : ''}
-${record.tags && record.tags.length > 0 ? `Tags: [${record.tags.join(', ')}]` : ''}
+${record.tags && Array.isArray(record.tags) && record.tags.length > 0 ? `Tags: [${record.tags.join(', ')}]` : ''}
 Status: ${record.status}
 Contributed By: ${record.created_by}
 Created At: ${record.created_at}
@@ -234,7 +248,7 @@ Metric Name: ${record.name}
 ${record.formula ? `Formula: ${record.formula}` : ''}
 ${record.description ? `Description: |\n  ${record.description.split('\n').join('\n  ')}` : ''}
 ${record.category ? `Category: ${record.category}` : ''}
-${record.tags && record.tags.length > 0 ? `Tags: [${record.tags.join(', ')}]` : ''}
+${record.tags && Array.isArray(record.tags) && record.tags.length > 0 ? `Tags: [${record.tags.join(', ')}]` : ''}
 Status: ${record.status}
 Contributed By: ${record.created_by}
 Created At: ${record.created_at}
@@ -249,7 +263,7 @@ Created At: ${record.created_at}
 Dashboard Name: ${record.name}
 ${record.description ? `Description: |\n  ${record.description.split('\n').join('\n  ')}` : ''}
 ${record.category ? `Category: ${record.category}` : ''}
-${record.tags && record.tags.length > 0 ? `Tags: [${record.tags.join(', ')}]` : ''}
+${record.tags && Array.isArray(record.tags) && record.tags.length > 0 ? `Tags: [${record.tags.join(', ')}]` : ''}
 Status: ${record.status}
 Contributed By: ${record.created_by}
 Created At: ${record.created_at}

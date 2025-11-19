@@ -51,18 +51,18 @@ export default function EntityDetail({ kind, slug }: Props) {
 				← Back
 			</Link>
 			<h1 style={{ fontSize: '2rem', fontWeight: 600, marginTop: '0.5rem' }}>{item.name}</h1>
-			{(item as any).description ? (
-				<p style={{ color: 'var(--ifm-color-emphasis-700)' }}>{(item as any).description}</p>
+			{item.description ? (
+				<p style={{ color: 'var(--ifm-color-emphasis-700)' }}>{item.description}</p>
 			) : null}
 
 			{/* Tags/category */}
 			<div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
-				{(item as any).category ? (
+				{item.category ? (
 					<span style={{ padding: '0.25rem 0.75rem', backgroundColor: 'var(--ifm-color-emphasis-100)', borderRadius: 999, fontSize: '0.75rem' }}>
-						{(item as any).category}
+						{item.category}
 					</span>
 				) : null}
-				{(((item as any).tags as string[] | undefined) || []).map((t) => (
+				{(item.tags ?? []).map((t) => (
 					<span key={t} style={{ padding: '0.25rem 0.75rem', backgroundColor: 'var(--ifm-color-emphasis-100)', borderRadius: 999, fontSize: '0.75rem' }}>
 						{t}
 					</span>
@@ -71,12 +71,13 @@ export default function EntityDetail({ kind, slug }: Props) {
 
 			{/* Actions */}
 			<div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem' }}>
-				<LikeButton itemType={kind} itemId={(item as any).id} itemSlug={(item as any).slug} />
-				<AddToAnalysisButton itemType={kind as any} itemId={(item as any).id} itemSlug={(item as any).slug} itemName={item.name} />
+				<LikeButton itemType={kind} itemId={item.id} itemSlug={item.slug} />
+				<AddToAnalysisButton itemType={kind} itemId={item.id} itemSlug={item.slug} itemName={item.name} />
 			</div>
 		</main>
 	);
 }
+
 
 
 

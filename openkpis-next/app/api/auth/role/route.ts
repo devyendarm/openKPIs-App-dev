@@ -16,10 +16,12 @@ export async function GET() {
 
 		const role = await getUserRoleServer();
 		return NextResponse.json({ authenticated: true, role }, { status: 200 });
-	} catch (e: any) {
-		return NextResponse.json({ authenticated: false, role: 'contributor', error: e?.message || 'Unexpected error' }, { status: 500 });
+	} catch (err: unknown) {
+		const message = err instanceof Error ? err.message : 'Unexpected error';
+		return NextResponse.json({ authenticated: false, role: 'contributor', error: message }, { status: 500 });
 	}
 }
+
 
 
 

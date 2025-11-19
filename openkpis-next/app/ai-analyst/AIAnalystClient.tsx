@@ -1,0 +1,499 @@
+'use client';
+
+import React, { useMemo, useState } from 'react';
+
+import Step1Requirements from './components/Step1Requirements';
+import Step2ExpandedRequirements from './components/Step2ExpandedRequirements';
+import Step3Insights from './components/Step3Insights';
+import Step4Dashboards from './components/Step4Dashboards';
+import type {
+  AIExpanded,
+  AnalyticsSolution,
+  DashboardSuggestion,
+  ExistingItem,
+  GroupedInsight,
+  ItemsInAnalysis,
+  Suggestion,
+} from './types';
+
+type SuggestionBuckets = {
+  kpis: Suggestion[];
+  metrics: Suggestion[];
+  dimensions: Suggestion[];
+};
+
+interface AIAnalystClientProps {
+  existingItems: {
+    kpis: ExistingItem[];
+    metrics: ExistingItem[];
+    dimensions: ExistingItem[];
+  };
+}
+
+const EMPTY_ITEMS: ItemsInAnalysis = {
+  kpis: [],
+  metrics: [],
+  dimensions: [],
+};
+
+const EMPTY_SUGGESTIONS: SuggestionBuckets = {
+  kpis: [],
+  metrics: [],
+  dimensions: [],
+};
+
+function normalizeSuggestion(item: Suggestion): Suggestion {
+  return {
+    name: item.name,
+    description: item.description ?? '',
+    category: item.category,
+    tags: Array.isArray(item.tags) ? item.tags : [],
+  };
+}
+
+function convertExistingToSuggestion(item: ExistingItem): Suggestion {
+  return {
+    name: item.name,
+    description: item.description ?? '',
+    category: item.category,
+    tags: Array.isArray(item.tags) ? item.tags : [],
+  };
+}
+
+export default function AIAnalystClient({ existingItems }: AIAnalystClientProps) {
+  const [step, setStep] = useState<number>(1);
+  const [analyticsSolution, setAnalyticsSolution] = useState<AnalyticsSolution>('Google Analytics (GA4)');
+  const [requirements, setRequirements] = useState<string>('');
+  const [kpiCount, setKpiCount] = useState<number>(5);
+  const [platforms, setPlatforms] = useState<string[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [aiExpanded, setAiExpanded] = useState<AIExpanded | null>(null);
+  const [editingAiExpanded, setEditingAiExpanded] = useState<boolean>(false);
+  const [suggestions, setSuggestions] = useState<SuggestionBuckets>(EMPTY_SUGGESTIONS);
+  const [itemsInAnalysis, setItemsInAnalysis] = useState<ItemsInAnalysis>(EMPTY_ITEMS);
+  const [insights, setInsights] = useState<GroupedInsight[]>([]);
+  const [dashboards, setDashboards] = useState<DashboardSuggestion[]>([]);
+  const [selectedInsights, setSelectedInsights] = useState<Set<string>>(new Set());
+
+  const existingItemsByType = useMemo(
+    () => ({
+      kpis: existingItems.kpis,
+      metrics: existingItems.metrics,
+      dimensions: existingItems.dimensions,
+    }),
+    [existingItems],
+  );
+
+  const handleAddToAnalysis = (type: 'kpi' | 'metric' | 'dimension', item: Suggestion) => {
+    const targetKey = `${type}s` as keyof ItemsInAnalysis;
+    const entry = {
+      name: item.name,
+      description: item.description,
+      category: item.category,
+      tags: item.tags ?? [],
+    };
+    setItemsInAnalysis((prev) => {
+      const existing = prev[targetKey];
+      if (existing.some((current) => current.name === entry.name)) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [targetKey]: [...existing, entry],
+      };
+    });
+  };
+
+  const handleRemoveFromAnalysis = (type: 'kpis' | 'metrics' | 'dimensions', itemNames: string[]) => {
+    setItemsInAnalysis((prev) => ({
+      ...prev,
+      [type]: prev[type].filter((item) => !itemNames.includes(item.name)),
+    }));
+  };
+
+  const addItemFromExisting = (type: 'kpis' | 'metrics' | 'dimensions', item: ExistingItem) => {
+    const suggestion = convertExistingToSuggestion(item);
+    setSuggestions((prev) => ({
+      ...prev,
+      [type]: prev[type].some((existing) => existing.name === suggestion.name)
+        ? prev[type]
+        : [...prev[type], suggestion],
+    }));
+
+    const singular = type.slice(0, -1) as 'kpi' | 'metric' | 'dimension';
+    handleAddToAnalysis(singular, suggestion);
+  };
+
+  const resetAnalysisState = () => {
+    setStep(2);
+    setEditingAiExpanded(false);
+    setItemsInAnalysis(EMPTY_ITEMS);
+    setInsights([]);
+    setDashboards([]);
+    setSelectedInsights(new Set());
+  };
+
+  const handleAnalyze = async () => {
+    if (!requirements.trim()) {
+      alert('Please enter business requirements');
+      return;
+    }
+    setLoading(true);
+    try {
+      const expandResponse = await fetch('/api/ai/expand-requirements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requirements, analyticsSolution, platforms, kpiCount }),
+      });
+      if (!expandResponse.ok) {
+        const errorPayload = await expandResponse.json().catch(() => ({}));
+        throw new Error(errorPayload?.error || 'Failed to expand requirements');
+      }
+      const expandedData = await expandResponse.json();
+      setAiExpanded(expandedData?.ai_expanded ?? null);
+
+      const suggestResponse = await fetch('/api/ai/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requirements, analyticsSolution, kpiCount }),
+      });
+      if (!suggestResponse.ok) {
+        const errorPayload = await suggestResponse.json().catch(() => ({}));
+        let message = errorPayload?.error || 'Failed to get suggestions';
+        if (suggestResponse.status === 401 || message.includes('API key')) {
+          message = [
+            message,
+            '',
+            'Please verify your OPENAI_API_KEY configuration:',
+            '1. Ensure OPENAI_API_KEY is set in .env.local',
+            '2. The key should start with "sk-proj-"',
+            '3. Confirm the key at https://platform.openai.com/account/api-keys',
+            '4. Make sure billing is enabled',
+            '5. Restart the dev server after changing environment variables',
+          ].join('\n');
+        }
+        throw new Error(message);
+      }
+      const suggestionPayload = await suggestResponse.json();
+      setSuggestions({
+        kpis: (suggestionPayload?.kpis ?? []).map(normalizeSuggestion),
+        metrics: (suggestionPayload?.metrics ?? []).map(normalizeSuggestion),
+        dimensions: (suggestionPayload?.dimensions ?? []).map(normalizeSuggestion),
+      });
+      resetAnalysisState();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get AI suggestions. Please try again.';
+      console.error('Error analyzing requirements:', error);
+      alert(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGenerateMoreInsights = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/ai/insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requirements, analyticsSolution, aiExpanded, itemsInAnalysis }),
+      });
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(errorPayload?.error || 'Failed to get insights');
+      }
+      const payload = await response.json();
+      const newInsights: GroupedInsight[] = payload?.insights ?? [];
+      setInsights((prev) => [...prev, ...newInsights]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get insights. Please try again.';
+      console.error('Error generating insights:', error);
+      alert(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoadDashboards = async () => {
+    if (selectedInsights.size === 0) {
+      alert('Please select at least one insight before viewing dashboard suggestions');
+      return;
+    }
+    setLoading(true);
+    try {
+      const selectedInsightEntities = Array.from(selectedInsights)
+        .map((id) => insights.find((entry) => entry.id === id))
+        .filter((entry): entry is GroupedInsight => Boolean(entry));
+
+      const response = await fetch('/api/ai/dashboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requirements,
+          analyticsSolution,
+          selectedInsights: selectedInsightEntities,
+          aiExpanded,
+        }),
+      });
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(errorPayload?.error || 'Failed to get dashboard suggestions');
+      }
+      const payload = await response.json();
+      setDashboards(payload?.dashboards ?? []);
+      setStep(4);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get dashboard suggestions. Please try again.';
+      console.error('Error loading dashboards:', error);
+      alert(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveAnalysis = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/ai/save-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: itemsInAnalysis,
+          dashboards,
+          insights,
+          requirements,
+          analyticsSolution,
+        }),
+      });
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(errorPayload?.error || 'Failed to save analysis');
+      }
+      const payload = await response.json();
+      alert(`Analysis saved successfully! ${payload?.savedItems ?? 0} items added to your analysis.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save analysis. Please try again.';
+      console.error('Error saving analysis:', error);
+      alert(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <style
+        dangerouslySetInnerHTML={{
+          __html:
+            '@keyframes spin {0%{transform:rotate(0)}100%{transform:rotate(360deg)}}@keyframes pulse{0%,80%,100%{opacity:.3;transform:scale(.8)}40%{opacity:1;transform:scale(1.2)}}',
+        }}
+      />
+      <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem 1rem' }}>
+        <div style={{ marginBottom: '2rem' }}>
+          <h1 style={{ fontSize: '2rem', fontWeight: '600', marginBottom: '0.5rem' }}>AI Analyst</h1>
+          <p style={{ color: 'var(--ifm-color-emphasis-600)' }}>
+            Get personalized KPI recommendations based on your business requirements and analytics solution.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3rem', position: 'relative' }}>
+          {[1, 2, 3, 4].map((num) => (
+            <div
+              key={num}
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}
+            >
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  backgroundColor: step >= num ? 'var(--ifm-color-primary)' : 'var(--ifm-color-emphasis-200)',
+                  color: step >= num ? 'white' : 'var(--ifm-color-emphasis-700)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 600,
+                  marginBottom: '0.5rem',
+                  zIndex: 2,
+                }}
+              >
+                {num}
+              </div>
+              <div style={{ fontSize: '0.75rem', textAlign: 'center', color: step >= num ? 'var(--ifm-color-primary)' : 'var(--ifm-color-emphasis-600)' }}>
+                {num === 1 && 'Requirements'}
+                {num === 2 && 'KPI Suggestions'}
+                {num === 3 && 'Insights'}
+                {num === 4 && 'Dashboards'}
+              </div>
+              {num < 4 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '20px',
+                    left: '50%',
+                    width: '100%',
+                    height: '2px',
+                    backgroundColor: step > num ? 'var(--ifm-color-primary)' : 'var(--ifm-color-emphasis-200)',
+                    zIndex: 1,
+                  }}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {loading && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              backdropFilter: 'blur(4px)',
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: 'white',
+                borderRadius: '16px',
+                padding: '3rem',
+                maxWidth: '500px',
+                width: '90%',
+                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+                textAlign: 'center',
+              }}
+            >
+              <div
+                style={{
+                  width: '60px',
+                  height: '60px',
+                  margin: '0 auto 1.5rem',
+                  border: '4px solid var(--ifm-color-emphasis-200)',
+                  borderTop: '4px solid var(--ifm-color-primary)',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                }}
+              />
+              <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem', color: 'var(--ifm-font-color-base)' }}>
+                Analyzing Your Requirements
+              </h3>
+              <p style={{ fontSize: '0.875rem', color: 'var(--ifm-color-emphasis-700)', marginBottom: '1.5rem' }}>
+                Our AI is processing your business requirements and generating {kpiCount} personalized KPIs with proportional metrics and
+                dimensions...
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: 'var(--ifm-color-primary)',
+                      animation: `pulse 1.4s ease-in-out ${i * 0.2}s infinite`,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div
+          style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '2.5rem',
+            minHeight: '400px',
+            position: 'relative',
+            opacity: loading ? 0.5 : 1,
+            transition: 'opacity 0.3s ease',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+            border: '1px solid var(--ifm-color-emphasis-200)',
+          }}
+        >
+          {step === 1 && (
+            <Step1Requirements
+              analyticsSolution={analyticsSolution}
+              setAnalyticsSolution={setAnalyticsSolution}
+              requirements={requirements}
+              setRequirements={setRequirements}
+              kpiCount={kpiCount}
+              setKpiCount={setKpiCount}
+              platforms={platforms}
+              setPlatforms={setPlatforms}
+              loading={loading}
+              onAnalyze={handleAnalyze}
+            />
+          )}
+
+          {step === 2 && (
+            <Step2ExpandedRequirements
+              userRequirement={requirements}
+              aiExpanded={aiExpanded}
+              editingAiExpanded={editingAiExpanded}
+              setEditingAiExpanded={setEditingAiExpanded}
+              setAiExpanded={setAiExpanded}
+              suggestions={suggestions}
+              existingItems={existingItemsByType}
+              itemsInAnalysis={itemsInAnalysis}
+              onAddToAnalysis={handleAddToAnalysis}
+              onAddExistingToAnalysis={addItemFromExisting}
+              onRemoveFromAnalysis={handleRemoveFromAnalysis}
+              onNext={async () => {
+                if (insights.length === 0) {
+                  setLoading(true);
+                  try {
+                    const response = await fetch('/api/ai/insights', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ requirements, analyticsSolution, aiExpanded }),
+                    });
+                    if (!response.ok) {
+                      const errorPayload = await response.json().catch(() => ({}));
+                      throw new Error(errorPayload?.error || 'Failed to get insights');
+                    }
+                    const payload = await response.json();
+                    setInsights(payload?.insights ?? []);
+                    setStep(3);
+                  } catch (error) {
+                    const message = error instanceof Error ? error.message : 'Failed to get insights. Please try again.';
+                    console.error('Error loading insights:', error);
+                    alert(message);
+                  } finally {
+                    setLoading(false);
+                  }
+                } else {
+                  setStep(3);
+                }
+              }}
+            />
+          )}
+
+          {step === 3 && (
+            <Step3Insights
+              insights={insights}
+              selectedInsights={selectedInsights}
+              setSelectedInsights={setSelectedInsights}
+              loading={loading}
+              onGenerateMore={handleGenerateMoreInsights}
+              onSaveAnalysis={handleSaveAnalysis}
+              onNext={handleLoadDashboards}
+            />
+          )}
+
+          {step === 4 && (
+            <Step4Dashboards dashboards={dashboards} loading={loading} onSaveAnalysis={handleSaveAnalysis} />
+          )}
+        </div>
+      </main>
+    </>
+  );
+}
+

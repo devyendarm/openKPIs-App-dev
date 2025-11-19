@@ -1,102 +1,109 @@
-'use client';
-
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import type { User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
-import { getUserRoleClient } from '@/lib/roles/client';
-
-type AuthContextValue = {
-	user: User | null;
-	role: 'admin' | 'editor' | 'contributor';
-	loading: boolean;
-	refresh: () => void;
+import React from 'react';
+import type { User, SupabaseClient, PostgrestError } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
+import AuthClientProvider from './AuthClientProvider';
+import { currentAppEnv } from '@/src/types/entities';
+type Role = 'admin' | 'editor' | 'contributor';
+type UserProfileRow = {
+  id: string;
+  user_role: Role | null;
+  role?: Role | null;
+  is_admin?: boolean | null;
+  is_editor?: boolean | null;
+  [key: string]: unknown;
 };
 
-const AuthContext = createContext<AuthContextValue>({
-	user: null,
-	role: 'contributor',
-	loading: true,
-	refresh: () => {},
-});
+async function resolveUserRole(supabase: SupabaseClient, user: User) {
+	const appEnv = currentAppEnv();
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-	const [user, setUser] = useState<User | null>(null);
-	const [role, setRole] = useState<'admin' | 'editor' | 'contributor'>('contributor');
-	const [loading, setLoading] = useState(true);
-	const [version, setVersion] = useState(0);
+	const { data: profile, error } = await supabase
+		.from('user_profiles')
+		.select('user_role, role, is_admin, is_editor')
+		.eq('id', user.id)
+		.eq('app_env', appEnv)
+		.maybeSingle();
 
-	useEffect(() => {
-		let mounted = true;
-		async function init() {
-			try {
-				const { data } = await supabase.auth.getSession();
-				const u = data.session?.user ?? null;
-				if (!mounted) return;
-				setUser(u);
-				if (u) {
-					// Try client role first
-					let r = await getUserRoleClient();
-					// Fallback to server-resolved role (more reliable on first load)
-					try {
-						const resp = await fetch('/api/debug/auth', { cache: 'no-store' });
-						const dj = await resp.json();
-						if (dj?.user?.role && (dj.user.role === 'admin' || dj.user.role === 'editor' || dj.user.role === 'contributor')) {
-							r = dj.user.role;
-						}
-					} catch {}
-					if (!mounted) return;
-					setRole(r as any);
-				} else {
-					setRole('contributor');
-				}
-			} finally {
-				if (mounted) setLoading(false);
-			}
+	if (error && (error as PostgrestError).code !== 'PGRST116') {
+		console.error('[AuthProvider] Error loading profile:', error);
+	}
+
+	let profileData = profile;
+
+	const githubUsername =
+		(user.user_metadata?.user_name as string | undefined) ||
+		(user.user_metadata?.preferred_username as string | undefined) ||
+		null;
+	const fullName = (user.user_metadata?.full_name as string | undefined) || null;
+	const email = user.email || null;
+	const avatarUrl = (user.user_metadata?.avatar_url as string | undefined) || null;
+
+	if (!profileData) {
+		const { data: inserted, error: insertError } = await supabase
+			.from('user_profiles')
+			.insert({
+				id: user.id,
+				app_env: appEnv,
+				user_role: 'contributor',
+				github_username: githubUsername,
+				full_name: fullName,
+				email,
+				avatar_url: avatarUrl,
+				role: 'user',
+				is_editor: false,
+				is_admin: false,
+				last_active_at: new Date().toISOString(),
+			})
+			.select('user_role, role, is_admin, is_editor')
+			.single();
+		if (insertError) {
+			console.error('[AuthProvider] Error creating profile:', insertError);
+		} else {
+			profileData = inserted;
 		}
-		init();
+	} else {
+		const { error: updateError } = await supabase
+			.from('user_profiles')
+			.update({
+				app_env: appEnv,
+				github_username: githubUsername,
+				full_name: fullName,
+				email,
+				avatar_url: avatarUrl,
+				last_active_at: new Date().toISOString(),
+			})
+			.eq('id', user.id)
+			.eq('app_env', appEnv);
+		if (updateError) {
+			console.error('[AuthProvider] Error updating profile:', updateError);
+		}
+	}
 
-		const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
-			const nextUser = session?.user ?? null;
-			setUser(nextUser);
-			if (nextUser) {
-				let r = await getUserRoleClient();
-				try {
-					const resp = await fetch('/api/debug/auth', { cache: 'no-store' });
-					const dj = await resp.json();
-					if (dj?.user?.role && (dj.user.role === 'admin' || dj.user.role === 'editor' || dj.user.role === 'contributor')) {
-						r = dj.user.role;
-					}
-				} catch {}
-				setRole(r as any);
-			}
-			else setRole('contributor');
-			// bump context to notify consumers that depend on version changes
-			setVersion((v) => v + 1);
-			// also keep legacy custom event for existing listeners
-			window.dispatchEvent(new CustomEvent('openkpis-auth-change', { detail: { user: nextUser } }));
-		});
+	const resolvedRole =
+		(profileData?.user_role ||
+			profileData?.role ||
+			(user.user_metadata?.user_role as string | undefined) ||
+			'contributor')?.toString().toLowerCase() as Role;
 
-		return () => {
-			sub.subscription.unsubscribe();
-			mounted = false;
-		};
-	}, []);
+	if (resolvedRole === 'admin' || resolvedRole === 'editor') {
+		return resolvedRole;
+	}
+	if (profileData?.is_admin) return 'admin';
+	if (profileData?.is_editor) return 'editor';
+	return 'contributor';
+}
 
-	const value = useMemo<AuthContextValue>(
-		() => ({
-			user,
-			role,
-			loading,
-			refresh: () => setVersion((v) => v + 1),
-		}),
-		[user, role, loading, version]
+export default async function AuthProvider({ children }: { children: React.ReactNode }) {
+	const supabase = await createClient();
+	const {
+		data: { session },
+	} = await supabase.auth.getSession();
+
+	const initialUser = session?.user ?? null;
+	const initialRole: Role = initialUser ? await resolveUserRole(supabase, initialUser) : 'contributor';
+
+	return (
+		<AuthClientProvider initialSession={session ?? null} initialUser={initialUser} initialRole={initialRole}>
+			{children}
+		</AuthClientProvider>
 	);
-
-	return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-
-export function useAuth(): AuthContextValue {
-	return useContext(AuthContext);
-}
-
-

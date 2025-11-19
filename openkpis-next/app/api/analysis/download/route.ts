@@ -1,24 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { withTablePrefix } from '@/src/types/entities';
+
+type ItemType = 'kpi' | 'event' | 'dimension' | 'metric' | 'dashboard';
+
+type AnalysisItem = {
+  item_type: ItemType;
+  item_id: string;
+};
+
+type ExportableEntity = {
+  id: string;
+  slug: string | null;
+  name: string;
+  sql_query?: string | null;
+  data_layer_mapping?: string | Record<string, unknown> | null;
+  xdm_mapping?: string | Record<string, unknown> | null;
+  amplitude_implementation?: string | null;
+  description?: string | null;
+  category?: string | null;
+  formula?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+  item_type?: ItemType;
+};
+
+type DownloadRequestBody = {
+  items: AnalysisItem[];
+};
 
 export async function POST(request: NextRequest) {
   try {
-    const { items } = await request.json();
+    const { items }: DownloadRequestBody = await request.json();
+    if (!Array.isArray(items) || !items.length) {
+      return NextResponse.json({ error: 'No items provided' }, { status: 400 });
+    }
     const searchParams = request.nextUrl.searchParams;
     const type = searchParams.get('type') || 'sql';
     const solution = searchParams.get('solution');
 
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
 
     // Fetch full item data from database
-    const itemData = [];
+    const itemData: ExportableEntity[] = [];
     for (const item of items) {
-      let tableName = item.item_type === 'kpi' ? 'kpis' : 
-                     item.item_type === 'event' ? 'events' :
-                     item.item_type === 'dimension' ? 'dimensions' :
-                     item.item_type === 'metric' ? 'metrics' :
-                     'dashboards';
+      const tableName = (() => {
+        switch (item.item_type) {
+          case 'kpi':
+            return withTablePrefix('kpis');
+          case 'event':
+            return withTablePrefix('events');
+          case 'dimension':
+            return withTablePrefix('dimensions');
+          case 'metric':
+            return withTablePrefix('metrics');
+          default:
+            return withTablePrefix('dashboards');
+        }
+      })();
 
       const { data } = await supabase
         .from(tableName)
@@ -40,7 +79,7 @@ export async function POST(request: NextRequest) {
       content = itemData
         .map((item) => {
           if (item.sql_query) {
-            return `-- ${item.name}\n-- ${item.item_type.toUpperCase()}\n${item.sql_query}\n\n`;
+            return `-- ${item.name}\n-- ${item.item_type?.toUpperCase() || 'UNKNOWN'}\n${item.sql_query}\n\n`;
           }
           return null;
         })
@@ -51,7 +90,7 @@ export async function POST(request: NextRequest) {
       filename = 'analysis_compiled.sql';
     } else if (type === 'datalayer') {
       // Consolidated data layer based on solution
-      const dataLayer: any = {};
+      const dataLayer: Record<string, unknown> = {};
       
       itemData.forEach((item) => {
         if (solution === 'ga4' && item.data_layer_mapping) {
@@ -61,21 +100,25 @@ export async function POST(request: NextRequest) {
               ? JSON.parse(item.data_layer_mapping) 
               : item.data_layer_mapping;
             Object.assign(dataLayer, mapping);
-          } catch (e) {
+          } catch {
             // If not JSON, treat as text
-            dataLayer[item.slug] = item.data_layer_mapping;
+            if (item.slug) {
+              dataLayer[item.slug] = item.data_layer_mapping;
+            }
           }
         } else if (solution === 'adobe' && item.xdm_mapping) {
           // Parse and merge Adobe XDM mappings
           try {
             const mapping = typeof item.xdm_mapping === 'string'
-              ? JSON.parse(item.xdm_mapping)
+              ? JSON.parse(item.xdm_mapping as string)
               : item.xdm_mapping;
             Object.assign(dataLayer, mapping);
-          } catch (e) {
-            dataLayer[item.slug] = item.xdm_mapping;
+          } catch {
+            if (item.slug) {
+              dataLayer[item.slug] = item.xdm_mapping;
+            }
           }
-        } else if (solution === 'amplitude' && item.amplitude_implementation) {
+        } else if (solution === 'amplitude' && item.amplitude_implementation && item.slug) {
           dataLayer[item.slug] = item.amplitude_implementation;
         }
       });
@@ -108,9 +151,10 @@ export async function POST(request: NextRequest) {
         'Content-Disposition': `attachment; filename="${filename}"`,
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to generate download';
     console.error('Error generating download:', error);
-    return NextResponse.json({ error: 'Failed to generate download' }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

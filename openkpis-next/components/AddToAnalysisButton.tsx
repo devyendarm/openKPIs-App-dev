@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import type { User } from '@supabase/supabase-js';
 import { supabase, getCurrentUser } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
+import { withTablePrefix } from '@/src/types/entities';
 
 interface AddToAnalysisButtonProps {
   itemType: 'kpi' | 'event' | 'dimension' | 'metric' | 'dashboard';
@@ -10,6 +11,8 @@ interface AddToAnalysisButtonProps {
   itemSlug: string;
   itemName: string;
 }
+
+const analysisBasketTable = withTablePrefix('analysis_basket');
 
 export default function AddToAnalysisButton({
   itemType,
@@ -19,23 +22,69 @@ export default function AddToAnalysisButton({
 }: AddToAnalysisButtonProps) {
   const [inBasket, setInBasket] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
-  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    checkUser();
+    async function loadUser() {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+    }
+    void loadUser();
   }, []);
 
   useEffect(() => {
-    if (user || typeof window !== 'undefined') {
-      checkBasketStatus();
-    }
-  }, [user, itemId, itemType]);
+    let active = true;
+    async function checkBasketStatus() {
+      setLoading(true);
+      try {
+        const sessionId = getSessionId();
 
-  async function checkUser() {
-    const currentUser = await getCurrentUser();
-    setUser(currentUser);
-  }
+        let query = supabase
+          .from(analysisBasketTable)
+          .select('id')
+          .eq('item_type', itemType)
+          .eq('item_id', itemId);
+
+        if (user) {
+          query = query.eq('user_id', user.id);
+        } else if (sessionId) {
+          query = query.eq('session_id', sessionId);
+        } else {
+          if (active) {
+            setInBasket(false);
+            setLoading(false);
+          }
+          return;
+        }
+
+        const { data, error } = await query.single();
+
+        if (active) {
+          if (!error && data) {
+            setInBasket(true);
+          } else {
+            setInBasket(false);
+          }
+        }
+      } catch {
+        if (active) {
+          setInBasket(false);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      void checkBasketStatus();
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [user, itemId, itemType]);
 
   function getSessionId() {
     if (typeof window === 'undefined') return null;
@@ -47,38 +96,6 @@ export default function AddToAnalysisButton({
     return sessionId;
   }
 
-  async function checkBasketStatus() {
-    setLoading(true);
-    try {
-      const sessionId = getSessionId();
-      
-      let query = supabase
-        .from('analysis_basket')
-        .select('id')
-        .eq('item_type', itemType)
-        .eq('item_id', itemId);
-
-      if (user) {
-        query = query.eq('user_id', user.id);
-      } else if (sessionId) {
-        query = query.eq('session_id', sessionId);
-      } else {
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await query.single();
-
-      if (!error && data) {
-        setInBasket(true);
-      }
-    } catch (err) {
-      // Not in basket
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function handleToggleBasket() {
     setLoading(true);
     try {
@@ -87,7 +104,7 @@ export default function AddToAnalysisButton({
       if (inBasket) {
         // Remove from basket
         let deleteQuery = supabase
-          .from('analysis_basket')
+          .from(analysisBasketTable)
           .delete()
           .eq('item_type', itemType)
           .eq('item_id', itemId);
@@ -105,7 +122,7 @@ export default function AddToAnalysisButton({
         }
       } else {
         // Add to basket
-        const insertData: any = {
+        const insertData: Record<string, unknown> = {
           item_type: itemType,
           item_id: itemId,
           item_slug: itemSlug,
@@ -118,7 +135,8 @@ export default function AddToAnalysisButton({
           insertData.session_id = sessionId;
         }
 
-        const { error } = await supabase.from('analysis_basket').insert(insertData);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase.from(analysisBasketTable) as any).insert(insertData);
 
         if (!error) {
           setInBasket(true);
@@ -126,8 +144,8 @@ export default function AddToAnalysisButton({
           // router.push('/analysis');
         }
       }
-    } catch (err) {
-      console.error('Error toggling basket:', err);
+    } catch (error) {
+      console.error('Error toggling basket:', error);
       alert('Failed to update analysis basket. Please try again.');
     } finally {
       setLoading(false);

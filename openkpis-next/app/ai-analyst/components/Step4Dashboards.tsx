@@ -33,7 +33,7 @@ export default function Step4Dashboards({
         </div>
       ) : dashboards.length === 0 ? (
         <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--ifm-color-emphasis-600)' }}>
-          No dashboards generated yet. Please select insights in the previous step and click "Next: Dashboard Recommendations".
+          No dashboards generated yet. Please select insights in the previous step and click &ldquo;Next: Dashboard Recommendations&rdquo;.
         </div>
       ) : (
         <div>

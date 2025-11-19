@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAISuggestions } from '@/lib/services/ai';
+import { getAISuggestions, type AIResponse } from '@/lib/services/ai';
 
 // Increase timeout for AI suggestions (up to 200 seconds)
 export const maxDuration = 200;
 
+type SuggestRequestBody = {
+  requirements: string;
+  analyticsSolution: string;
+  kpiCount?: number;
+};
+
 export async function POST(request: NextRequest) {
   try {
-    const { requirements, analyticsSolution, kpiCount } = await request.json();
+    const { requirements, analyticsSolution, kpiCount }: SuggestRequestBody = await request.json();
 
     if (!requirements || !analyticsSolution) {
       return NextResponse.json(
@@ -20,11 +26,12 @@ export async function POST(request: NextRequest) {
 
     const suggestions = await getAISuggestions(requirements, analyticsSolution, validKpiCount);
 
-    return NextResponse.json(suggestions);
-  } catch (error: any) {
+    return NextResponse.json<AIResponse>(suggestions);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to get AI suggestions';
     console.error('[AI Suggest] Error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to get AI suggestions' },
+      { error: message },
       { status: 500 }
     );
   }

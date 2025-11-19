@@ -1,15 +1,12 @@
 'use client';
 
 import React from 'react';
-import type { GroupedInsight, AIExpanded } from '../types';
+import type { GroupedInsight } from '../types';
 
 interface Step3InsightsProps {
   insights: GroupedInsight[];
   selectedInsights: Set<string>;
   setSelectedInsights: (insights: Set<string>) => void;
-  aiExpanded: AIExpanded | null;
-  requirements: string;
-  analyticsSolution: string;
   loading: boolean;
   onGenerateMore: () => void;
   onSaveAnalysis: () => void;
@@ -35,9 +32,6 @@ export default function Step3Insights({
   insights,
   selectedInsights,
   setSelectedInsights,
-  aiExpanded,
-  requirements,
-  analyticsSolution,
   loading,
   onGenerateMore,
   onSaveAnalysis,
@@ -127,7 +121,7 @@ export default function Step3Insights({
 
       {insights.length === 0 ? (
         <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--ifm-color-emphasis-600)' }}>
-          No insights generated yet. Click "Generate More Insights" to get started.
+          No insights generated yet. Click &ldquo;Generate More Insights&rdquo; to get started.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>

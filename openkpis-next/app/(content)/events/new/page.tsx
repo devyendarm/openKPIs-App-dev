@@ -14,7 +14,7 @@ import SubmitBar from '@/components/forms/SubmitBar';
 import { useItemForm } from '@/hooks/useItemForm';
 
 export default function NewEventPage() {
-  const { user, loading, saving, error, formData, setField, handleNameChange, handleSlugChange, handleSubmit } = useItemForm({
+  const { user, saving, error, formData, setField, handleNameChange, handleSlugChange, handleSubmit } = useItemForm({
     type: 'event',
     afterCreateRedirect: ({ slug }) => `/events/${slug}/edit`,
   });

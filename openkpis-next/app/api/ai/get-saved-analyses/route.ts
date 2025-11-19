@@ -1,12 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { withTablePrefix } from '@/src/types/entities';
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const supabase = await createClient();
     
     // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     
     let userId: string | null = null;
     if (user) {
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch user's saved analyses
     const { data: analyses, error: analysesError } = await supabase
-      .from('user_analyses')
+      .from(withTablePrefix('user_analyses'))
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch user's saved insights
     const { data: insights, error: insightsError } = await supabase
-      .from('user_insights')
+      .from(withTablePrefix('user_insights'))
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
     const userName = currentUser?.user_metadata?.user_name || currentUser?.email || '';
     
     const { data: dashboards, error: dashboardsError } = await supabase
-      .from('dashboards')
+      .from(withTablePrefix('dashboards'))
       .select('*')
       .eq('created_by', userName || '')
       .order('created_at', { ascending: false });
@@ -73,10 +74,11 @@ export async function GET(request: NextRequest) {
       insights: insights || [],
       dashboards: dashboards || [],
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch saved analyses';
     console.error('[Get Saved Analyses] Error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch saved analyses' },
+      { error: message },
       { status: 500 }
     );
   }

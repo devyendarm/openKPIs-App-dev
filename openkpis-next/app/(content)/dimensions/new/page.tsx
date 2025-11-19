@@ -14,7 +14,7 @@ import SubmitBar from '@/components/forms/SubmitBar';
 import { useItemForm } from '@/hooks/useItemForm';
 
 export default function NewDimensionPage() {
-  const { user, loading, saving, error, formData, setField, handleNameChange, handleSlugChange, handleSubmit } = useItemForm({
+  const { user, saving, error, formData, setField, handleNameChange, handleSlugChange, handleSubmit } = useItemForm({
     type: 'dimension',
     afterCreateRedirect: ({ slug }) => `/dimensions/${slug}/edit`,
   });

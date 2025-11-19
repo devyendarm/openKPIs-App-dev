@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies, headers } from 'next/headers';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { currentAppEnv, sqlTableFor } from '@/src/types/entities';
 
 export async function GET() {
   try {
@@ -58,22 +59,26 @@ export async function GET() {
       });
     }
 
+    const appEnv = currentAppEnv();
+
     const { data: profile } = await supabase
       .from('user_profiles')
       .select('user_role')
       .eq('id', user.id)
-      .single();
+      .eq('app_env', appEnv)
+      .maybeSingle();
 
     const role = (profile?.user_role || user.user_metadata?.user_role || 'contributor').toLowerCase();
 
     // Probe admin client and a simple query
     let adminOk = false;
     let adminError: string | null = null;
-    let draftCounts: Record<string, number> = {};
+    const draftCounts: Record<string, number> = {};
     try {
       const admin = createAdminClient();
-      const tables = ['kpis', 'metrics', 'dimensions', 'events', 'dashboards'];
-      for (const table of tables) {
+      const tables = ['kpi', 'metric', 'dimension', 'event', 'dashboard'] as const;
+      for (const kind of tables) {
+        const table = sqlTableFor(kind);
         const { count, error } = await admin
           .from(table)
           .select('*', { count: 'exact', head: true })
@@ -82,8 +87,8 @@ export async function GET() {
         draftCounts[table] = count ?? 0;
       }
       adminOk = true;
-    } catch (e: any) {
-      adminError = e?.message || String(e);
+    } catch (error: unknown) {
+      adminError = error instanceof Error ? error.message : String(error);
     }
 
     return NextResponse.json({
@@ -93,8 +98,9 @@ export async function GET() {
       role,
       admin: { ok: adminOk, error: adminError, draftCounts },
     });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'Unexpected error' }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unexpected error';
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
 

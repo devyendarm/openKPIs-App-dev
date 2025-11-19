@@ -1,9 +1,10 @@
 'use client';
 
-import React, { Suspense, useState, useEffect } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase, STATUS } from '@/lib/supabase';
+import { withTablePrefix } from '@/src/types/entities';
 
 interface SearchResult {
   type: string;
@@ -15,67 +16,107 @@ interface SearchResult {
   industry: string[];
 }
 
+type SearchableRow = {
+  name: string;
+  description?: string | null;
+  slug: string;
+  tags?: string[] | null;
+  category?: string | null;
+  industry?: string[] | null;
+};
+
+const KPI_TABLE = withTablePrefix('kpis');
+const EVENT_TABLE = withTablePrefix('events');
+const DIMENSION_TABLE = withTablePrefix('dimensions');
+const METRIC_TABLE = withTablePrefix('metrics');
+
+const toStringArray = (value?: string[] | null): string[] =>
+  Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+
 function SearchPageContent() {
   const searchParams = useSearchParams();
-  const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || searchParams.get('search') || '');
+  const searchQuery = useMemo(
+    () => searchParams.get('q') || searchParams.get('search') || '',
+    [searchParams]
+  );
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  useEffect(() => {
-    if (searchQuery.trim()) {
-      performSearch();
+  const performSearch = useCallback(async () => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      setIsSearching(false);
+      setResults([]);
+      return;
     }
-  }, [searchQuery]);
 
-  async function performSearch() {
     setIsSearching(true);
     try {
-      const query = searchQuery.trim().toLowerCase();
-
       const [kpisResult, eventsResult, dimensionsResult, metricsResult] = await Promise.all([
-        supabase.from('kpis').select('*').eq('status', STATUS.PUBLISHED).or(`name.ilike.%${query}%,description.ilike.%${query}%`),
-        supabase.from('events').select('*').eq('status', STATUS.PUBLISHED).or(`name.ilike.%${query}%,description.ilike.%${query}%`),
-        supabase.from('dimensions').select('*').eq('status', STATUS.PUBLISHED).or(`name.ilike.%${query}%,description.ilike.%${query}%`),
-        supabase.from('metrics').select('*').eq('status', STATUS.PUBLISHED).or(`name.ilike.%${query}%,description.ilike.%${query}%`)
+        supabase
+          .from(KPI_TABLE)
+          .select('*')
+          .eq('status', STATUS.PUBLISHED)
+          .or(`name.ilike.%${query}%,description.ilike.%${query}%`),
+        supabase
+          .from(EVENT_TABLE)
+          .select('*')
+          .eq('status', STATUS.PUBLISHED)
+          .or(`name.ilike.%${query}%,description.ilike.%${query}%`),
+        supabase
+          .from(DIMENSION_TABLE)
+          .select('*')
+          .eq('status', STATUS.PUBLISHED)
+          .or(`name.ilike.%${query}%,description.ilike.%${query}%`),
+        supabase
+          .from(METRIC_TABLE)
+          .select('*')
+          .eq('status', STATUS.PUBLISHED)
+          .or(`name.ilike.%${query}%,description.ilike.%${query}%`),
       ]);
 
+      const kpiRows = (kpisResult.data ?? []) as SearchableRow[];
+      const eventRows = (eventsResult.data ?? []) as SearchableRow[];
+      const dimensionRows = (dimensionsResult.data ?? []) as SearchableRow[];
+      const metricRows = (metricsResult.data ?? []) as SearchableRow[];
+
       const allResults: SearchResult[] = [
-        ...((kpisResult.data || []) as Array<any>).map(item => ({
+        ...kpiRows.map((item) => ({
           type: 'KPI',
           title: item.name,
           description: item.description || '',
           url: `/kpis/${item.slug}`,
-          tags: item.tags || [],
+          tags: toStringArray(item.tags),
           category: item.category ? [item.category] : [],
-          industry: item.industry || []
+          industry: toStringArray(item.industry),
         })),
-        ...((eventsResult.data || []) as Array<any>).map(item => ({
+        ...eventRows.map((item) => ({
           type: 'Event',
           title: item.name,
           description: item.description || '',
           url: `/events/${item.slug}`,
-          tags: item.tags || [],
+          tags: toStringArray(item.tags),
           category: item.category ? [item.category] : [],
-          industry: []
+          industry: [],
         })),
-        ...((dimensionsResult.data || []) as Array<any>).map(item => ({
+        ...dimensionRows.map((item) => ({
           type: 'Dimension',
           title: item.name,
           description: item.description || '',
           url: `/dimensions/${item.slug}`,
-          tags: item.tags || [],
+          tags: toStringArray(item.tags),
           category: item.category ? [item.category] : [],
-          industry: []
+          industry: [],
         })),
-        ...((metricsResult.data || []) as Array<any>).map(item => ({
+        ...metricRows.map((item) => ({
           type: 'Metric',
           title: item.name,
           description: item.description || '',
           url: `/metrics/${item.slug}`,
-          tags: item.tags || [],
+          tags: toStringArray(item.tags),
           category: item.category ? [item.category] : [],
-          industry: []
-        }))
+          industry: [],
+        })),
       ];
 
       setResults(allResults);
@@ -85,7 +126,11 @@ function SearchPageContent() {
     } finally {
       setIsSearching(false);
     }
-  }
+  }, [searchQuery]);
+
+  useEffect(() => {
+    void performSearch();
+  }, [performSearch]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -137,7 +182,13 @@ function SearchPageContent() {
       {searchQuery && (
         <div>
           <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}>
-            {isSearching ? 'Searching...' : `Results for "${searchQuery}" (${results.length})`}
+            {isSearching ? (
+              'Searching...'
+            ) : (
+              <>
+                Results for &ldquo;{searchQuery}&rdquo; ({results.length})
+              </>
+            )}
           </h2>
 
           {isSearching ? (
@@ -213,7 +264,9 @@ function SearchPageContent() {
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--ifm-color-emphasis-600)' }}>
-              <p>No results found for "{searchQuery}"</p>
+              <p>
+                No results found for &ldquo;{searchQuery}&rdquo;
+              </p>
             </div>
           )}
         </div>

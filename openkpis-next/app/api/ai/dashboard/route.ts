@@ -1,12 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDashboardSuggestions } from '@/lib/services/ai';
+import { getDashboardSuggestions, type DashboardSuggestionDetailed } from '@/lib/services/ai';
 
 // Increase timeout for dashboard generation (up to 200 seconds)
 export const maxDuration = 200;
 
+interface InsightItem {
+  id: string;
+  title: string;
+  group: string;
+  rationale: string;
+  chart_hint: string;
+}
+
+type DashboardRequestBody = {
+  requirements: string;
+  analyticsSolution: string;
+  selectedInsights: InsightItem[];
+  aiExpanded?: Record<string, unknown> | null;
+};
+
 export async function POST(request: NextRequest) {
   try {
-    const { requirements, analyticsSolution, selectedInsights, aiExpanded } = await request.json();
+    const {
+      requirements,
+      analyticsSolution,
+      selectedInsights,
+      aiExpanded,
+    } = (await request.json()) as DashboardRequestBody;
 
     if (!requirements || !analyticsSolution) {
       return NextResponse.json(
@@ -32,11 +52,12 @@ export async function POST(request: NextRequest) {
       aiExpanded || null
     );
 
-    return NextResponse.json({ dashboards });
-  } catch (error: any) {
+    return NextResponse.json<{ dashboards: DashboardSuggestionDetailed[] }>({ dashboards });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to get dashboard suggestions';
     console.error('[AI Dashboard] Error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to get dashboard suggestions' },
+      { error: message },
       { status: 500 }
     );
   }

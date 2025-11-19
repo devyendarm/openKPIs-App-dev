@@ -223,7 +223,7 @@ export default function Step2ExpandedRequirements({
     });
   };
 
-  const showTooltip = (e: React.MouseEvent, item: Suggestion | ExistingItem) => {
+  const showTooltip = (e: React.MouseEvent<HTMLElement>, item: Suggestion | ExistingItem) => {
     const rect = e.currentTarget.getBoundingClientRect();
     setTooltip({
       visible: true,
@@ -232,7 +232,7 @@ export default function Step2ExpandedRequirements({
       content: (
         <div style={{ padding: '0.5rem', background: 'rgba(0,0,0,0.9)', color: 'white', borderRadius: '4px', fontSize: '0.75rem', maxWidth: '300px' }}>
           <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>{item.name}</div>
-          {('description' in item) && (item as any).description && <div>{(item as any).description}</div>}
+          {item.description ? <div>{item.description}</div> : null}
         </div>
       ),
     });
@@ -240,18 +240,6 @@ export default function Step2ExpandedRequirements({
 
   const hideTooltip = () => {
     setTooltip({ visible: false, x: 0, y: 0, content: null });
-  };
-
-  const getChipColor = (type: string) => {
-    const colors: Record<string, string> = {
-      goal: 'var(--ifm-color-primary)',
-      questions: 'var(--ifm-color-info)',
-      scope: 'var(--ifm-color-success)',
-      time_horizon: 'var(--ifm-color-warning)',
-      breakdowns: 'var(--ifm-color-danger)',
-      constraints: 'var(--ifm-color-emphasis-700)',
-    };
-    return colors[type] || 'var(--ifm-color-emphasis-400)';
   };
 
   const hasSelectedItems = selectedSuggested.kpis.size > 0 || selectedSuggested.metrics.size > 0 || selectedSuggested.dimensions.size > 0;
@@ -271,7 +259,7 @@ export default function Step2ExpandedRequirements({
           You said:
         </div>
         <div style={{ fontSize: '0.9375rem', color: 'var(--ifm-font-color-base)', lineHeight: '1.6' }}>
-          "{userRequirement}"
+          &ldquo;{userRequirement}&rdquo;
         </div>
       </div>
 
@@ -497,7 +485,7 @@ export default function Step2ExpandedRequirements({
                           fontSize: '0.875rem',
                         }}
                         onClick={() => onAddExistingToAnalysis(itemType, item)}
-                        onMouseEnter={(e) => showTooltip(e as any, item)}
+                        onMouseEnter={(e) => showTooltip(e, item)}
                         onMouseLeave={hideTooltip}
                       >
                         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -645,7 +633,7 @@ export default function Step2ExpandedRequirements({
                   fontSize: '0.75rem',
                   color: '#8b6914',
                 }}>
-                  <strong>Note:</strong> New KPIs marked above will be submitted to OpenKPIs repository when you "Add to Analysis". They'll be created as draft items for editor review.
+                  <strong>Note:</strong> New KPIs marked above will be submitted to OpenKPIs repository when you &ldquo;Add to Analysis&rdquo;. They&rsquo;ll be created as draft items for editor review.
                 </div>
               )}
             </div>

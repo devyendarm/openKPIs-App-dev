@@ -1,44 +1,24 @@
-'use client';
-
-import React, { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import React from 'react';
 import Link from 'next/link';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import LikeButton from '@/components/LikeButton';
 import AddToAnalysisButton from '@/components/AddToAnalysisButton';
-import { supabase } from '@/lib/supabase';
+import { fetchDashboardBySlug } from '@/lib/server/dashboards';
+import { collectUserIdentifiers } from '@/lib/server/entities';
+import { STATUS } from '@/lib/supabase/auth';
 
-export default function DashboardDetailPage() {
-  const params = useParams();
-  const slug = params?.slug as string;
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-  const [dashboard, setDashboard] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+export default async function DashboardDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  useEffect(() => {
-    if (slug) {
-      setLoading(true);
-      (async () => {
-        try {
-          const { data } = await supabase
-        .from('dashboards')
-        .select('*')
-        .eq('slug', slug)
-            .single();
-          setDashboard(data);
-        } finally {
-          setLoading(false);
-        }
-      })();
-    }
-  }, [slug]);
-
-  if (loading) {
-    return (
-      <main style={{ padding: '2rem', textAlign: 'center' }}>
-        <p>Loading...</p>
-      </main>
-    );
-  }
+  const admin = createAdminClient();
+  const dashboard = await fetchDashboardBySlug(admin, slug);
 
   if (!dashboard) {
     return (
@@ -51,24 +31,70 @@ export default function DashboardDetailPage() {
     );
   }
 
+  const identifiers = collectUserIdentifiers(user);
+  const isOwner = dashboard.created_by ? identifiers.includes(dashboard.created_by) : false;
+  const isVisible = dashboard.status === 'published' || isOwner;
+
+  if (!isVisible) {
+    return (
+      <main style={{ padding: '2rem', textAlign: 'center' }}>
+        <h1>Dashboard Not Available</h1>
+        <p style={{ color: 'var(--ifm-color-emphasis-600)' }}>
+          This dashboard is still in draft. Sign in with the account that created it to view the content.
+        </p>
+        <Link href="/dashboards" style={{ color: 'var(--ifm-color-primary)' }}>
+          ← Back to Dashboards
+        </Link>
+      </main>
+    );
+  }
+
+  const canEdit = isOwner && dashboard.status === STATUS.DRAFT;
+
   return (
     <main style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem' }}>
       <Link href="/dashboards" style={{ color: 'var(--ifm-color-primary)', textDecoration: 'none', fontSize: '0.875rem' }}>
         ← Back to Dashboards
       </Link>
-      <h1 style={{ fontSize: '2rem', fontWeight: 600, marginTop: '0.5rem' }}>{dashboard.name}</h1>
+      <h1 style={{ fontSize: '2rem', fontWeight: 600, marginTop: '0.5rem' }}>
+        {dashboard.name}
+        {dashboard.status === 'draft' && (
+          <span style={{
+            marginLeft: '0.75rem',
+            fontSize: '0.75rem',
+            padding: '0.25rem 0.75rem',
+            backgroundColor: '#fbbf24',
+            color: '#78350f',
+            borderRadius: '4px',
+          }}>
+            Draft
+          </span>
+        )}
+      </h1>
       {dashboard.description && <p style={{ color: 'var(--ifm-color-emphasis-700)' }}>{dashboard.description}</p>}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
-        {dashboard && (
-          <>
-            <LikeButton itemType="dashboard" itemId={dashboard.id} itemSlug={dashboard.slug} />
-            <AddToAnalysisButton
-              itemType="dashboard"
-              itemId={dashboard.id}
-              itemSlug={dashboard.slug}
-              itemName={dashboard.name}
-            />
-          </>
+        <LikeButton itemType="dashboard" itemId={dashboard.id} itemSlug={dashboard.slug} />
+        <AddToAnalysisButton
+          itemType="dashboard"
+          itemId={dashboard.id}
+          itemSlug={dashboard.slug}
+          itemName={dashboard.name}
+        />
+        {canEdit && (
+          <Link
+            href={`/dashboards/${slug}/edit`}
+            style={{
+              padding: '0.75rem 1.5rem',
+              backgroundColor: 'var(--ifm-color-primary)',
+              color: '#fff',
+              textDecoration: 'none',
+              borderRadius: '8px',
+              fontWeight: 500,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Edit
+          </Link>
         )}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
@@ -77,7 +103,7 @@ export default function DashboardDetailPage() {
             {dashboard.category}
           </span>
         )}
-        {(dashboard.tags || []).map((t: string) => (
+        {dashboard.tags.map((t) => (
           <span key={t} style={{ padding: '0.25rem 0.75rem', backgroundColor: 'var(--ifm-color-emphasis-100)', borderRadius: 999, fontSize: '0.75rem' }}>
             {t}
           </span>

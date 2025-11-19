@@ -1,10 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { withTablePrefix } from '@/src/types/entities';
+
+type DataLayerRequestBody = {
+  items: {
+    kpis?: Array<{ name: string }>;
+    metrics?: Array<{ name: string }>;
+    dimensions?: Array<{ name: string }>;
+  };
+  analyticsSolution: string;
+  submittedItems?: string[];
+};
+
+type MappingValue = Record<string, unknown>;
+
+type MappingSourceRow = {
+  name: string;
+  data_layer_mapping?: string | MappingValue | null;
+  ga4_implementation?: string | null;
+  adobe_implementation?: string | null;
+};
+
+const kpisTable = withTablePrefix('kpis');
+const eventsTable = withTablePrefix('events');
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    const { items, analyticsSolution, submittedItems } = await request.json();
+    const { items, analyticsSolution, submittedItems }: DataLayerRequestBody = await request.json();
 
     if (!items || !analyticsSolution) {
       return NextResponse.json(
@@ -13,8 +36,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const submittedNames = new Set(submittedItems || []);
-    const dataLayer: any = {
+    const submittedNames = new Set((submittedItems ?? []).map((name) => name.toLowerCase()));
+    const dataLayer: {
+      solution: string;
+      events: Array<{ name: string; mapping: MappingValue }>;
+      dataLayer: Record<string, unknown>;
+      timestamp: string;
+      note: string;
+    } = {
       solution: analyticsSolution,
       events: [],
       dataLayer: {},
@@ -22,71 +51,73 @@ export async function POST(request: NextRequest) {
       note: 'Only published items are included. Newly submitted items will appear after editor approval and publishing.',
     };
 
-    // Get published items from Supabase
-    const itemNames = {
-      kpis: (items.kpis || []).filter((item: any) => !submittedNames.has(item.name)).map((item: any) => item.name),
-      metrics: (items.metrics || []).filter((item: any) => !submittedNames.has(item.name)).map((item: any) => item.name),
-      dimensions: (items.dimensions || []).filter((item: any) => !submittedNames.has(item.name)).map((item: any) => item.name),
-    };
+    const collectNames = (list: Array<{ name: string }> | undefined) =>
+      (list ?? [])
+        .map((entry) => entry.name?.trim())
+        .filter((name): name is string => Boolean(name && !submittedNames.has(name.toLowerCase())));
 
-    // Fetch KPIs, Metrics, Dimensions and extract data layer mappings
-    if (itemNames.kpis.length > 0) {
+    const requestedKpis = collectNames(items.kpis);
+
+    const solutionLower = analyticsSolution.toLowerCase();
+
+    if (requestedKpis.length > 0) {
       const { data: allKpis } = await supabase
-        .from('kpis')
-        .select('name, data_layer_mapping, ga4_implementation, adobe_implementation, slug')
+        .from(kpisTable)
+        .select('name, data_layer_mapping, ga4_implementation, adobe_implementation')
         .eq('status', 'published');
 
-      const matchingKpis = allKpis?.filter((kpi: any) => {
+      const matchingKpis = (allKpis ?? []).filter((kpi) => {
         const kpiNameLower = kpi.name.toLowerCase();
-        return itemNames.kpis.some((itemName: string) => 
-          kpiNameLower === itemName.toLowerCase() || 
-          kpiNameLower.includes(itemName.toLowerCase()) ||
-          itemName.toLowerCase().includes(kpiNameLower)
-        );
+        return requestedKpis.some((itemName) => {
+          const lower = itemName.toLowerCase();
+          return (
+            kpiNameLower === lower ||
+            kpiNameLower.includes(lower) ||
+            lower.includes(kpiNameLower)
+          );
+        });
       });
 
-      matchingKpis?.forEach((kpi: any) => {
+      matchingKpis.forEach((kpi) => {
         if (kpi.data_layer_mapping) {
           try {
-            const mapping = typeof kpi.data_layer_mapping === 'string' 
-              ? JSON.parse(kpi.data_layer_mapping) 
-              : kpi.data_layer_mapping;
+            const mapping =
+              typeof kpi.data_layer_mapping === 'string'
+                ? (JSON.parse(kpi.data_layer_mapping) as MappingValue)
+                : kpi.data_layer_mapping;
             Object.assign(dataLayer.dataLayer, mapping);
-          } catch (e) {
-            // Invalid JSON, skip
+          } catch {
+            // ignore malformed JSON
           }
         }
-        // Also include GA4/Adobe implementations as text
-        if (kpi.ga4_implementation && analyticsSolution.toLowerCase().includes('ga4')) {
+        if (kpi.ga4_implementation && solutionLower.includes('ga4')) {
           dataLayer.dataLayer[`${kpi.name}_ga4`] = kpi.ga4_implementation;
         }
-        if (kpi.adobe_implementation && analyticsSolution.toLowerCase().includes('adobe')) {
+        if (kpi.adobe_implementation && solutionLower.includes('adobe')) {
           dataLayer.dataLayer[`${kpi.name}_adobe`] = kpi.adobe_implementation;
         }
       });
     }
 
-    // Fetch Events (if any are in the analysis)
-    // For now, we'll include common events based on KPIs
     const { data: events } = await supabase
-      .from('events')
-      .select('name, data_layer_mapping, ga4_implementation, adobe_implementation')
+      .from(eventsTable)
+      .select('name, data_layer_mapping')
       .eq('status', 'published')
-      .limit(50); // Get recent published events
+      .limit(50);
 
-    events?.forEach((event: any) => {
-      if (event.data_layer_mapping) {
-        try {
-          const mapping = typeof event.data_layer_mapping === 'string'
-            ? JSON.parse(event.data_layer_mapping)
+    (events ?? []).forEach((event) => {
+      if (!event.data_layer_mapping) return;
+      try {
+        const mapping =
+          typeof event.data_layer_mapping === 'string'
+            ? (JSON.parse(event.data_layer_mapping) as MappingValue)
             : event.data_layer_mapping;
-          dataLayer.events.push({
-            name: event.name,
-            mapping,
-          });
-        } catch (e) {
-          // Invalid JSON, skip
-        }
+        dataLayer.events.push({
+          name: event.name,
+          mapping,
+        });
+      } catch {
+        // ignore malformed JSON
       }
     });
 
@@ -96,10 +127,11 @@ export async function POST(request: NextRequest) {
         'Content-Disposition': `attachment; filename="datalayer-events-${analyticsSolution.replace(/\s+/g, '-').toLowerCase()}.json"`,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to generate data layer file';
     console.error('[Download DataLayer] Error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to generate data layer file' },
+      { error: message },
       { status: 500 }
     );
   }

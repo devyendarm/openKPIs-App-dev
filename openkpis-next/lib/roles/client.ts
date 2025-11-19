@@ -1,7 +1,14 @@
 import { supabase } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/supabase/auth';
-
+import { currentAppEnv } from '@/src/types/entities';
 export type UserRole = 'admin' | 'editor' | 'contributor';
+
+type UserProfileRow = {
+  user_role?: UserRole | null;
+  role?: UserRole | null;
+  is_admin?: boolean | null;
+  is_editor?: boolean | null;
+};
 
 export async function getUserRoleClient(): Promise<UserRole> {
 	const user = await getCurrentUser();
@@ -10,22 +17,29 @@ export async function getUserRoleClient(): Promise<UserRole> {
 	const metaRole = (user.user_metadata?.user_role as string | undefined)?.toLowerCase();
 	if (metaRole === 'admin' || metaRole === 'editor') return metaRole;
 
-	const { data } = (await supabase
+	const appEnv = currentAppEnv();
+
+	const { data } = await supabase
 		.from('user_profiles')
 		.select('user_role, role, is_admin, is_editor')
 		.eq('id', user.id)
-		.maybeSingle()) as any;
+		.eq('app_env', appEnv)
+		.maybeSingle();
 
-	let role =
-		(data?.user_role ||
-			data?.role ||
-			(user.user_metadata?.user_role as string | undefined) ||
-			'contributor')?.toString().toLowerCase();
+	const profileData = data as UserProfileRow | null;
 
-	if (!['editor', 'admin'].includes(role)) {
-		if (data?.is_admin) {
+	const candidate =
+		profileData?.user_role ??
+		profileData?.role ??
+		(user.user_metadata?.user_role as string | undefined) ??
+		'contributor';
+
+	let role = candidate.toString().toLowerCase();
+
+	if (role !== 'admin' && role !== 'editor') {
+		if (profileData?.is_admin) {
 			role = 'admin';
-		} else if (data?.is_editor) {
+		} else if (profileData?.is_editor) {
 			role = 'editor';
 		}
 	}
@@ -34,7 +48,3 @@ export async function getUserRoleClient(): Promise<UserRole> {
 	if (role === 'editor') return 'editor';
 	return 'contributor';
 }
-
-
-
-

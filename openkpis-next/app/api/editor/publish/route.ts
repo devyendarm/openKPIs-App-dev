@@ -1,16 +1,16 @@
 import { NextRequest } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { ok, badRequest, unauthorized, forbidden, error as errorResp, multiStatus } from '@/lib/api/response';
+import { withTablePrefix } from '@/src/types/entities';
 
-const TABLE_CONFIG: Record<
-  string,
-  { table: string; syncPath: (id: string) => string }
-> = {
-  kpi: { table: 'kpis', syncPath: (id: string) => `/api/kpis/${id}/sync-github` },
-  metric: { table: 'metrics', syncPath: (id: string) => `/api/metrics/${id}/sync-github` },
-  dimension: { table: 'dimensions', syncPath: (id: string) => `/api/dimensions/${id}/sync-github` },
-  event: { table: 'events', syncPath: (id: string) => `/api/events/${id}/sync-github` },
-  dashboard: { table: 'dashboards', syncPath: (id: string) => `/api/dashboards/${id}/sync-github` },
+type ItemType = 'kpi' | 'metric' | 'dimension' | 'event' | 'dashboard';
+
+const TABLE_CONFIG: Record<ItemType, { table: string; syncPath: (id: string) => string }> = {
+  kpi: { table: withTablePrefix('kpis'), syncPath: (id: string) => `/api/kpis/${id}/sync-github` },
+  metric: { table: withTablePrefix('metrics'), syncPath: (id: string) => `/api/metrics/${id}/sync-github` },
+  dimension: { table: withTablePrefix('dimensions'), syncPath: (id: string) => `/api/dimensions/${id}/sync-github` },
+  event: { table: withTablePrefix('events'), syncPath: (id: string) => `/api/events/${id}/sync-github` },
+  dashboard: { table: withTablePrefix('dashboards'), syncPath: (id: string) => `/api/dashboards/${id}/sync-github` },
 };
 
 export async function POST(request: NextRequest) {
@@ -33,13 +33,16 @@ export async function POST(request: NextRequest) {
       return forbidden();
     }
 
-    const { itemType, itemId } = await request.json();
+    const { itemType, itemId } = (await request.json()) as {
+      itemType?: ItemType;
+      itemId?: string;
+    };
 
     if (!itemType || !itemId) {
       return badRequest('itemType and itemId are required');
     }
 
-    const config = TABLE_CONFIG[itemType as string];
+    const config = itemType ? TABLE_CONFIG[itemType] : undefined;
 
     if (!config) {
       return badRequest(`Unsupported item type: ${itemType}`);
@@ -82,8 +85,9 @@ export async function POST(request: NextRequest) {
     }
 
     return ok({ published: true, item: updated });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to publish item';
     console.error('[Editor Publish] Error', error);
-    return errorResp(error?.message || 'Failed to publish item', 500);
+    return errorResp(message, 500);
   }
 }

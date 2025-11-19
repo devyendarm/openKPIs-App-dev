@@ -397,8 +397,9 @@ export default function Home() {
             }}
           >
             {/* KPIs Card */}
-            <a
+            <Link
               href="/kpis"
+              prefetch={false}
               style={{ textDecoration: 'none', color: 'inherit' }}
             >
               <div
@@ -450,11 +451,12 @@ export default function Home() {
                   Standardized KPI definitions with formulas, implementation guides, and platform equivalents.
                 </p>
               </div>
-            </a>
+            </Link>
 
             {/* Dimensions Card */}
-            <a
+            <Link
               href="/dimensions"
+              prefetch={false}
               style={{ textDecoration: 'none', color: 'inherit' }}
             >
               <div
@@ -506,11 +508,12 @@ export default function Home() {
                   Data attributes and segmentation variables used across KPIs for consistent analysis.
                 </p>
               </div>
-            </a>
+            </Link>
 
             {/* Events Card */}
-            <a
+            <Link
               href="/events"
+              prefetch={false}
               style={{ textDecoration: 'none', color: 'inherit' }}
             >
               <div
@@ -562,7 +565,7 @@ export default function Home() {
                   Tracking events and parameters needed to calculate KPIs across different platforms.
                 </p>
               </div>
-            </a>
+            </Link>
           </div>
         </div>
       </section>
@@ -619,8 +622,9 @@ export default function Home() {
               </svg>
               Fork Repository
             </a>
-            <a
+            <Link
               href="/kpis"
+              prefetch={false}
               style={{
                 fontSize: 'clamp(0.875rem, 2vw, 1rem)',
                 padding: 'clamp(0.75rem, 2vw, 1rem) clamp(1rem, 3vw, 2rem)',
@@ -634,7 +638,7 @@ export default function Home() {
               }}
             >
               Browse Documentation
-            </a>
+            </Link>
           </div>
         </div>
       </section>

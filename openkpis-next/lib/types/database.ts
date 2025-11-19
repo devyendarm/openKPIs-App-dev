@@ -112,13 +112,13 @@ export interface Metric {
 export interface Job {
   id: string;
   type: 'create_pr' | 'sync_content' | 'ai_analysis' | 'reindex_search';
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   priority: number;
   attempts: number;
   max_attempts: number;
   error_message?: string;
-  result?: Record<string, any>;
+  result?: Record<string, unknown>;
   created_at: string;
   started_at?: string;
   completed_at?: string;

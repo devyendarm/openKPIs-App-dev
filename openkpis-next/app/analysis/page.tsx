@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
+import { withTablePrefix } from '@/src/types/entities';
+import { useAuth } from '@/app/providers/AuthClientProvider';
 
 type BasketItem = {
   id: string;
@@ -47,6 +49,8 @@ type SavedDashboard = {
   created_at: string;
 };
 
+const analysisBasketTable = withTablePrefix('analysis_basket');
+
 const TABS = [
   { key: 'basket', label: 'Analysis Basket' },
   { key: 'analyses', label: 'Saved AI Analyses' },
@@ -63,6 +67,36 @@ type ItemsByType = {
   metrics: BasketItem[];
   dashboards: BasketItem[];
 };
+
+type StructuredError = {
+  message?: string;
+  code?: string;
+  error?: {
+    message?: string;
+  };
+};
+
+function extractErrorMessage(error: unknown): string {
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  if (error && typeof error === 'object') {
+    const structured = error as StructuredError;
+    return (
+      structured.message ||
+      structured.error?.message ||
+      structured.code ||
+      'Unknown error'
+    );
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'Unknown error';
+}
 
 const PRIMARY_BUTTON: React.CSSProperties = {
   padding: '0.75rem 1.5rem',
@@ -119,11 +153,83 @@ export default function AnalysisPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('basket');
   const [loadingBasket, setLoadingBasket] = useState(true);
   const [loadingSaved, setLoadingSaved] = useState(true);
+  const { user, loading: authLoading } = useAuth();
+
+  const loadBasketItems = useCallback(async () => {
+    setLoadingBasket(true);
+    // Safety timeout to ensure loading state is cleared even if query hangs
+    const timeoutId = setTimeout(() => {
+      console.warn('Basket items query timed out after 10 seconds');
+      setLoadingBasket(false);
+    }, 10000);
+
+    try {
+      const sessionId = ensureSessionId();
+
+      let query = supabase
+        .from(analysisBasketTable)
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (user?.id) {
+        query = query.eq('user_id', user.id);
+      } else if (sessionId) {
+        query = query.eq('session_id', sessionId);
+      }
+
+      const { data, error } = await query;
+      clearTimeout(timeoutId);
+      if (error) throw error;
+      setBasketItems(data ?? []);
+    } catch (error: unknown) {
+      clearTimeout(timeoutId);
+      const message = extractErrorMessage(error);
+      // Ensure we don't keep stale items and log useful info
+      setBasketItems([]);
+      console.error('Error loading basket items:', message, error);
+    } finally {
+      setLoadingBasket(false);
+    }
+  }, [user?.id]);
+
+  const loadSavedLists = useCallback(async () => {
+    if (!user) {
+      setSavedAnalyses([]);
+      setSavedInsights([]);
+      setSavedDashboards([]);
+      setLoadingSaved(false);
+      return;
+    }
+    setLoadingSaved(true);
+    try {
+      const response = await fetch('/api/ai/get-saved-analyses');
+      if (!response.ok) throw new Error('Failed to load saved analyses');
+      const json = await response.json();
+      setSavedAnalyses(json.analyses ?? []);
+      setSavedInsights(json.insights ?? []);
+      setSavedDashboards(json.dashboards ?? []);
+    } catch (error: unknown) {
+      const message = extractErrorMessage(error);
+      console.error('Error loading saved data:', message, error);
+    } finally {
+      setLoadingSaved(false);
+    }
+  }, [user]);
 
   useEffect(() => {
+    // Always load basket items (works with or without auth)
     void loadBasketItems();
-    void loadSavedLists();
-  }, []);
+    // Only load saved lists if auth is ready and user exists
+    if (!authLoading && user) {
+      void loadSavedLists();
+    } else if (!authLoading) {
+      // Auth is ready but no user - clear saved lists
+      setSavedAnalyses([]);
+      setSavedInsights([]);
+      setSavedDashboards([]);
+      setLoadingSaved(false);
+    }
+  }, [authLoading, user, loadBasketItems, loadSavedLists]);
 
   const itemsByType = useMemo<ItemsByType>(
     () => ({
@@ -136,72 +242,18 @@ export default function AnalysisPage() {
     [basketItems]
   );
 
-  async function loadBasketItems() {
-    setLoadingBasket(true);
-    try {
-      const sessionId = ensureSessionId();
-      const { data: auth } = await supabase.auth.getUser();
-
-      let query = supabase
-        .from('analysis_basket')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (auth?.user?.id) {
-        query = query.eq('user_id', auth.user.id);
-      } else if (sessionId) {
-        query = query.eq('session_id', sessionId);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      setBasketItems(data ?? []);
-    } catch (error) {
-      const anyErr = error as any;
-      const message =
-        (anyErr && (anyErr.message || anyErr.error?.message || anyErr.code)) ||
-        'Unknown error';
-      // Ensure we don't keep stale items and log useful info
-      setBasketItems([]);
-      console.error('Error loading basket items:', message, anyErr);
-    } finally {
-      setLoadingBasket(false);
-    }
-  }
-
-  async function loadSavedLists() {
-    setLoadingSaved(true);
-    try {
-      const response = await fetch('/api/ai/get-saved-analyses');
-      if (!response.ok) throw new Error('Failed to load saved analyses');
-      const json = await response.json();
-      setSavedAnalyses(json.analyses ?? []);
-      setSavedInsights(json.insights ?? []);
-      setSavedDashboards(json.dashboards ?? []);
-    } catch (error) {
-      const anyErr = error as any;
-      const message =
-        (anyErr && (anyErr.message || anyErr.error?.message || anyErr.code)) ||
-        'Unknown error';
-      console.error('Error loading saved data:', message, anyErr);
-    } finally {
-      setLoadingSaved(false);
-    }
-  }
-
   async function handleRemoveItem(itemId: string, itemType: BasketItem['item_type']) {
     try {
       const sessionId = ensureSessionId();
-      const { data: auth } = await supabase.auth.getUser();
 
       let deleteQuery = supabase
-        .from('analysis_basket')
+        .from(analysisBasketTable)
         .delete()
         .eq('item_type', itemType)
         .eq('item_id', itemId);
 
-      if (auth?.user?.id) {
-        deleteQuery = deleteQuery.eq('user_id', auth.user.id);
+      if (user?.id) {
+        deleteQuery = deleteQuery.eq('user_id', user.id);
       } else if (sessionId) {
         deleteQuery = deleteQuery.eq('session_id', sessionId);
       }
@@ -210,12 +262,9 @@ export default function AnalysisPage() {
       if (error) throw error;
 
       setBasketItems((prev) => prev.filter((item) => !(item.item_id === itemId && item.item_type === itemType)));
-    } catch (error) {
-      const anyErr = error as any;
-      const message =
-        (anyErr && (anyErr.message || anyErr.error?.message || anyErr.code)) ||
-        'Unknown error';
-      console.error('Error removing item from analysis basket:', message, anyErr);
+    } catch (error: unknown) {
+      const message = extractErrorMessage(error);
+      console.error('Error removing item from analysis basket:', message, error);
     }
   }
 
@@ -227,12 +276,11 @@ export default function AnalysisPage() {
 
     try {
       const sessionId = ensureSessionId();
-      const { data: auth } = await supabase.auth.getUser();
 
-      let deleteQuery = supabase.from('analysis_basket').delete();
+      let deleteQuery = supabase.from(analysisBasketTable).delete();
 
-      if (auth?.user?.id) {
-        deleteQuery = deleteQuery.eq('user_id', auth.user.id);
+      if (user?.id) {
+        deleteQuery = deleteQuery.eq('user_id', user.id);
       } else if (sessionId) {
         deleteQuery = deleteQuery.eq('session_id', sessionId);
       }
@@ -241,12 +289,9 @@ export default function AnalysisPage() {
       if (error) throw error;
 
       setBasketItems([]);
-    } catch (error) {
-      const anyErr = error as any;
-      const message =
-        (anyErr && (anyErr.message || anyErr.error?.message || anyErr.code)) ||
-        'Unknown error';
-      console.error('Error clearing analysis basket:', message, anyErr);
+    } catch (error: unknown) {
+      const message = extractErrorMessage(error);
+      console.error('Error clearing analysis basket:', message, error);
     }
   }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { withTablePrefix } from '@/src/types/entities';
 
 function createSlug(name: string): string {
   return name
@@ -10,10 +11,24 @@ function createSlug(name: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+type SubmitItem = {
+  type: 'kpi' | 'metric' | 'dimension';
+  item: {
+    name: string;
+    description?: string;
+    category?: string;
+    tags?: string[];
+    formula?: string;
+  };
+};
+
+const contributionsTable = withTablePrefix('contributions');
+const auditLogTable = withTablePrefix('audit_log');
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    const { items } = await request.json();
+    const { items } = (await request.json()) as { items: SubmitItem[] };
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
@@ -40,7 +55,7 @@ export async function POST(request: NextRequest) {
     for (const { type, item } of items) {
       try {
         const slug = createSlug(item.name);
-        const tableName = `${type}s`; // kpis, metrics, dimensions
+        const tableName = withTablePrefix(`${type}s`); // kpis, metrics, dimensions
 
         // Check if item already exists
         const { data: existing } = await supabase
@@ -56,7 +71,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Insert new item with draft status
-        const insertData: any = {
+        const insertData: Record<string, unknown> = {
           slug,
           name: item.name,
           description: item.description || null,
@@ -85,7 +100,7 @@ export async function POST(request: NextRequest) {
         submittedIds.push(newItem.id);
 
         // Log to audit trail
-        await supabase.from('audit_log').insert({
+        await supabase.from(auditLogTable).insert({
           table_name: tableName,
           record_id: newItem.id,
           action: 'created',
@@ -97,7 +112,7 @@ export async function POST(request: NextRequest) {
         });
 
         // Create contribution record
-        await supabase.from('contributions').insert({
+        await supabase.from(contributionsTable).insert({
           user_id: userId,
           item_type: type,
           item_id: newItem.id,
@@ -132,8 +147,9 @@ export async function POST(request: NextRequest) {
           });
         }
         // Note: For metrics/dimensions, add similar sync routes if needed
-      } catch (error: any) {
-        console.error(`Error processing ${type} ${item.name}:`, error);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`Error processing ${type} ${item.name}:`, message);
         // Continue with next item
       }
     }
@@ -143,10 +159,11 @@ export async function POST(request: NextRequest) {
       submitted: submittedIds.length,
       message: `Successfully submitted ${submittedIds.length} new item(s) as drafts`,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to submit new items';
     console.error('[Submit New Items] Error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to submit new items' },
+      { error: message },
       { status: 500 }
     );
   }

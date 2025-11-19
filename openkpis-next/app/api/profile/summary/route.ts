@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { ok, unauthorized, error } from '@/lib/api/response';
+import { currentAppEnv, withTablePrefix } from '@/src/types/entities';
 
 export async function GET() {
   try {
@@ -14,6 +15,12 @@ export async function GET() {
     }
 
     const userId = user.id;
+    const appEnv = currentAppEnv();
+
+    const likesTable = withTablePrefix('likes');
+    const contributionsTable = withTablePrefix('contributions');
+    const insightsTable = withTablePrefix('user_insights');
+    const analysesTable = withTablePrefix('user_analyses');
 
     const [
       { data: profile },
@@ -22,26 +29,31 @@ export async function GET() {
       { data: insights },
       { data: analyses },
     ] = await Promise.all([
-      supabase.from('user_profiles').select('*').eq('id', userId).single(),
       supabase
-        .from('likes')
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .eq('app_env', appEnv)
+        .maybeSingle(),
+      supabase
+        .from(likesTable)
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
       supabase
-        .from('contributions')
+        .from(contributionsTable)
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(100),
       supabase
-        .from('user_insights')
+        .from(insightsTable)
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(100),
       supabase
-        .from('user_analyses')
+        .from(analysesTable)
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
@@ -63,9 +75,10 @@ export async function GET() {
     };
 
     return ok(payload);
-  } catch (error: any) {
-    console.error('[Profile Summary] Error:', error);
-    return error(error?.message || 'Failed to load profile summary', 500);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to load profile summary';
+    console.error('[Profile Summary] Error:', err);
+    return error(message, 500);
   }
 }
 

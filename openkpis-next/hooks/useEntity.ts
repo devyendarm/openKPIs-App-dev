@@ -15,8 +15,11 @@ export function useEntity(kind: EntityKind, slug: string) {
       try {
         const data = await getEntityBySlug(kind, slug);
         if (!cancelled) setItem(data);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || 'Failed to load item');
+      } catch (error: unknown) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : 'Failed to load item';
+          setError(message);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

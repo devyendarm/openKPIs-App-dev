@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getCurrentUser, supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import type { EntityKind } from '@/src/types/entities';
 import { tableFor } from '@/src/types/entities';
+import { useAuth } from '@/app/providers/AuthClientProvider';
 
 export type ItemType = 'kpi' | 'metric' | 'dimension' | 'event' | 'dashboard';
 export type ItemStatus = 'draft' | 'published';
@@ -34,8 +35,7 @@ interface UseItemFormOptions {
 
 export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormOptions) {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const { user, loading: authLoading } = useAuth();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,21 +50,6 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
   });
 
   const [slugEdited, setSlugEdited] = useState<boolean>(false);
-
-  useMemo(() => {
-    (async () => {
-      try {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-      if (!currentUser) {
-        setError('Please sign in to create an item.');
-        }
-      } catch {
-        // Non-fatal for form rendering
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const slugPreview = useMemo(
     () => generateSlug(formData.slug || formData.name),
@@ -92,7 +77,8 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!user) {
+    const currentUser = user;
+    if (!currentUser) {
       setError('Please sign in to create an item.');
       return;
     }
@@ -105,7 +91,7 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
     setError(null);
 
     try {
-      const userName = user?.user_metadata?.user_name || user?.email || 'unknown';
+      const userName = currentUser.user_metadata?.user_name || currentUser.email || 'unknown';
       const plural = pluralize(type);
       const slug = formData.slug || generateSlug(formData.name);
 
@@ -158,8 +144,9 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
 
       const redirectTo = afterCreateRedirect?.({ id: created.id, slug }) ?? `/${plural}`;
       router.push(redirectTo);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to create item.');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to create item.';
+      setError(message);
       setSaving(false);
       return;
     }
@@ -167,7 +154,7 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
 
   return {
     user,
-    loading,
+    loading: authLoading,
     saving,
     error,
     formData,

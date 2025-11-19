@@ -14,7 +14,7 @@ import SubmitBar from '@/components/forms/SubmitBar';
 import { useItemForm } from '@/hooks/useItemForm';
 
 export default function NewMetricPage() {
-  const { user, loading, saving, error, formData, setField, handleNameChange, handleSlugChange, handleSubmit } = useItemForm({
+  const { user, saving, error, formData, setField, handleNameChange, handleSlugChange, handleSubmit } = useItemForm({
     type: 'metric',
     afterCreateRedirect: ({ slug }) => `/metrics/${slug}/edit`,
   });

@@ -1,13 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getInsightSuggestions } from '@/lib/services/ai';
+import { getInsightSuggestions, type GroupedInsight } from '@/lib/services/ai';
 
 // Increase timeout for insights generation (up to 200 seconds)
 export const maxDuration = 200;
 
+type InsightRequestBody = {
+  requirements: string;
+  analyticsSolution: string;
+  aiExpanded?: Record<string, unknown> | null;
+  itemsInAnalysis?: {
+    kpis?: Array<{ name: string; description?: string; category?: string; tags?: string[] }>;
+    metrics?: Array<{ name: string; description?: string; category?: string; tags?: string[] }>;
+    dimensions?: Array<{ name: string; description?: string; category?: string; tags?: string[] }>;
+  };
+};
+
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { requirements, analyticsSolution, aiExpanded, itemsInAnalysis } = body;
+    const { requirements, analyticsSolution, aiExpanded, itemsInAnalysis }: InsightRequestBody = await request.json();
 
     if (!requirements || !analyticsSolution) {
       return NextResponse.json(
@@ -25,11 +35,12 @@ export async function POST(request: NextRequest) {
       itemsInAnalysis?.dimensions || []
     );
 
-    return NextResponse.json({ insights });
-  } catch (error: any) {
+    return NextResponse.json<{ insights: GroupedInsight[] }>({ insights });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to get insights';
     console.error('[API] AI insights error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to get insights' },
+      { error: message },
       { status: 500 }
     );
   }

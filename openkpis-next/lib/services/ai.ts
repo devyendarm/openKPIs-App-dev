@@ -101,7 +101,15 @@ async function callOpenAI(prompt: string, systemPrompt: string = 'Return ONLY va
                      (model.startsWith('gpt-4') && !model.includes('turbo') && !model.includes('gpt-4o'));
   const isNewModel = !isOldModel;
 
-  const requestBody: any = {
+  interface OpenAIRequest {
+    model: string;
+    messages: Array<{ role: string; content: string }>;
+    max_tokens?: number;
+    max_completion_tokens?: number;
+    service_tier?: string;
+  }
+
+  const requestBody: OpenAIRequest = {
     model: model,
     messages: [
       { role: 'system', content: systemPrompt },
@@ -146,7 +154,7 @@ async function callOpenAI(prompt: string, systemPrompt: string = 'Return ONLY va
 
   // Only set temperature if model supports it
   if (!requiresDefaultTemperature) {
-    requestBody.temperature = 0.7;
+    (requestBody as OpenAIRequest & { temperature?: number }).temperature = 0.7;
   }
 
   // Add timeout using AbortController (120 seconds)
@@ -236,11 +244,12 @@ async function callOpenAI(prompt: string, systemPrompt: string = 'Return ONLY va
     }
 
     return trimmedContent;
-  } catch (error: any) {
+  } catch (error: unknown) {
     clearTimeout(timeoutId);
     
     // Handle timeout specifically
-    if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+    const err = error as { name?: string; message?: string };
+    if (err.name === 'AbortError' || err.message?.includes('aborted')) {
       console.error('[AI Service] Request timeout after', timeoutMs, 'ms');
       throw new Error(`Request timed out after ${timeoutMs / 1000} seconds. The AI model may be taking longer than expected. Please try again with shorter requirements or try a different model.`);
     }
@@ -301,13 +310,14 @@ Suggest exactly ${kpiCount} KPIs, ${metricsCount} Metrics, ${dimensionsCount} Di
     }
     
     return parsed;
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const err = e as { message?: string };
     console.error('[AI Service] JSON parse error:', {
-      error: e.message,
+      error: err.message || 'Unknown error',
       contentPreview: content.substring(0, 200),
       contentLength: content.length,
     });
-    throw new Error(`Invalid JSON response from OpenAI: ${e.message}. The AI may have returned non-JSON content.`);
+    throw new Error(`Invalid JSON response from OpenAI: ${err.message || 'Unknown error'}. The AI may have returned non-JSON content.`);
   }
 }
 
@@ -345,8 +355,9 @@ Suggest 2 ADDITIONAL KPIs, 2 Metrics, 2 Dimensions. Descriptions: max 12 words e
       }
     }
     return JSON.parse(jsonContent) as AIResponse;
-  } catch (e: any) {
-    throw new Error(`Invalid JSON response from OpenAI: ${e.message}`);
+  } catch (e: unknown) {
+    const err = e as { message?: string };
+    throw new Error(`Invalid JSON response from OpenAI: ${err.message || 'Unknown error'}`);
   }
 }
 
@@ -371,18 +382,34 @@ export interface DashboardSuggestionDetailed {
   markdown?: string; // Generated markdown output
 }
 
+interface InsightItem {
+  id: string;
+  title: string;
+  group: string;
+  rationale: string;
+  chart_hint: string;
+}
+
+interface AIExpanded {
+  goal?: string;
+  scope?: string[];
+  time_horizon?: string;
+  breakdowns?: string[];
+  questions?: string[];
+}
+
 export async function getDashboardSuggestions(
   requirements: string,
   analyticsSolution: string,
-  selectedInsights: any[],
-  aiExpanded: any | null
+  selectedInsights: InsightItem[],
+  aiExpanded: AIExpanded | null
 ): Promise<DashboardSuggestionDetailed[]> {
   const truncatedRequirements = requirements.length > 400 
     ? requirements.substring(0, 400) + '...' 
     : requirements;
   
   // Build insight context
-  const insightsContext = selectedInsights.map((insight: any) => 
+  const insightsContext = selectedInsights.map((insight) => 
     `- [${insight.id}] ${insight.title} (${insight.group}): ${insight.rationale}. Chart: ${insight.chart_hint}`
   ).join('\n');
   
@@ -435,16 +462,17 @@ Return ONLY valid JSON (no markdown):
       ...dashboard,
       markdown: generateDashboardMarkdown(dashboard, selectedInsights)
     }));
-  } catch (e: any) {
-    throw new Error(`Invalid JSON response from OpenAI: ${e.message}`);
+  } catch (e: unknown) {
+    const err = e as { message?: string };
+    throw new Error(`Invalid JSON response from OpenAI: ${err.message || 'Unknown error'}`);
   }
 }
 
 /**
  * Generate markdown output for a dashboard
  */
-function generateDashboardMarkdown(dashboard: DashboardSuggestionDetailed, insights: any[]): string {
-  const insightMap = new Map(insights.map((insight: any) => [insight.id, insight]));
+function generateDashboardMarkdown(dashboard: DashboardSuggestionDetailed, insights: InsightItem[]): string {
+  const insightMap = new Map(insights.map((insight) => [insight.id, insight]));
   
   let markdown = `# ${dashboard.title}\n\n`;
   markdown += `**Purpose:** ${dashboard.purpose}\n\n`;
@@ -468,7 +496,7 @@ function generateDashboardMarkdown(dashboard: DashboardSuggestionDetailed, insig
     // List tiles/metrics
     if (section.tiles.length > 0) {
       markdown += `**Metrics & Visualizations:**\n\n`;
-      section.tiles.forEach((tile, tileIdx) => {
+      section.tiles.forEach((tile) => {
         markdown += `### ${tile.metric}\n\n`;
         markdown += `- **Breakdown by:** ${tile.by.join(', ')}\n`;
         markdown += `- **Chart Type:** ${tile.chart}\n\n`;
@@ -504,7 +532,7 @@ export interface GroupedInsight {
 export async function getInsightSuggestions(
   requirements: string,
   analyticsSolution: string,
-  aiExpanded: any | null,
+  aiExpanded: AIExpanded | null,
   selectedKPIs?: Array<{ name: string; description?: string; category?: string; tags?: string[] }>,
   selectedMetrics?: Array<{ name: string; description?: string; category?: string; tags?: string[] }>,
   selectedDimensions?: Array<{ name: string; description?: string; category?: string; tags?: string[] }>
@@ -524,7 +552,13 @@ Key Questions: ${(aiExpanded.questions || []).join('; ')}`;
   
   // Format selected items for the prompt
   let selectedItemsText = '';
-  const allItems: Array<{ type: string; item: any }> = [
+  interface SelectedItem {
+    name: string;
+    description?: string;
+    category?: string;
+    tags?: string[];
+  }
+  const allItems: Array<{ type: string; item: SelectedItem }> = [
     ...(selectedKPIs || []).map(item => ({ type: 'KPI', item })),
     ...(selectedMetrics || []).map(item => ({ type: 'Metric', item })),
     ...(selectedDimensions || []).map(item => ({ type: 'Dimension', item })),
@@ -607,7 +641,8 @@ Chart hints: bar, line, cohort_curve, funnel, heatmap, scatter, table, etc.`;
     }
     const parsed = JSON.parse(jsonContent);
     return parsed.insights || [];
-  } catch (e: any) {
-    throw new Error(`Invalid JSON response from OpenAI: ${e.message}`);
+  } catch (e: unknown) {
+    const err = e as { message?: string };
+    throw new Error(`Invalid JSON response from OpenAI: ${err.message || 'Unknown error'}`);
   }
 }

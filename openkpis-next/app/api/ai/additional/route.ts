@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdditionalSuggestions, AISuggestion } from '@/lib/services/ai';
+import { getAdditionalSuggestions, type AISuggestion } from '@/lib/services/ai';
+
+type AdditionalRequestBody = {
+  requirements: string;
+  analyticsSolution: string;
+  existingSuggestions?: {
+    kpis?: AISuggestion[];
+    metrics?: AISuggestion[];
+    dimensions?: AISuggestion[];
+  };
+};
 
 export async function POST(request: NextRequest) {
   try {
-    const { requirements, analyticsSolution, existingSuggestions } = await request.json();
+    const { requirements, analyticsSolution, existingSuggestions } = (await request.json()) as AdditionalRequestBody;
 
     if (!requirements || !analyticsSolution) {
       return NextResponse.json(
@@ -26,10 +36,11 @@ export async function POST(request: NextRequest) {
     );
 
     return NextResponse.json(additional);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to get additional suggestions';
     console.error('[AI Additional] Error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to get additional suggestions' },
+      { error: message },
       { status: 500 }
     );
   }

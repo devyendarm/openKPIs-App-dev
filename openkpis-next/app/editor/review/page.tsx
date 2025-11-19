@@ -3,8 +3,10 @@ import EditorReviewClient from './EditorReviewClient';
 import type { DraftItem, DraftItemType } from './types';
 import Link from 'next/link';
 import { getUserRoleServer } from '@/lib/roles/server';
+import { withTablePrefix } from '@/src/types/entities';
+import type { Metadata } from 'next';
 
-export async function generateMetadata() {
+export async function generateMetadata(): Promise<Metadata> {
   const role = await getUserRoleServer();
   if (role !== 'admin' && role !== 'editor') {
     return {
@@ -12,9 +14,9 @@ export async function generateMetadata() {
         index: false,
         follow: false,
       },
-    } as any;
+    };
   }
-  return {} as any;
+  return {};
 }
 
 interface TableConfig {
@@ -29,6 +31,17 @@ const TABLES: TableConfig[] = [
   { key: 'event', table: 'events' },
   { key: 'dashboard', table: 'dashboards' },
 ];
+
+type DraftRow = {
+  id: string;
+  name: string | null;
+  slug: string | null;
+  status: string | null;
+  created_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  github_pr_number: number | null;
+};
 
 export default async function EditorReviewPage() {
   const supabase = await createClient();
@@ -71,8 +84,9 @@ export default async function EditorReviewPage() {
   const admin = createAdminClient();
 
   const draftPromises = TABLES.map(async (config) => {
+    const tableName = withTablePrefix(config.table);
     const { data, error } = await admin
-      .from(config.table)
+      .from(tableName)
       .select('id, name, slug, status, created_by, created_at, updated_at:last_modified_at, github_pr_number')
       .eq('status', 'draft')
       .order('last_modified_at', { ascending: false })
@@ -82,7 +96,7 @@ export default async function EditorReviewPage() {
       return [] as DraftItem[];
     }
 
-    return data.map((item: any) => ({
+    return data.map((item: DraftRow) => ({
       ...item,
       type: config.key,
     })) as DraftItem[];

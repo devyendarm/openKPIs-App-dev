@@ -19,7 +19,7 @@ export default function VersionLogger() {
           typeof window !== 'undefined' ? window.location.host : 'server',
           (v?.git?.message || '').slice(0, 80)
         );
-      } catch (e) {
+      } catch {
         // Swallow errors; logging is best-effort
       }
     })();

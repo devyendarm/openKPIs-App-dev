@@ -48,7 +48,11 @@ export async function listEntities(params: ListParams & { includeCreatedBy?: str
   }
 
   if (params.limit !== undefined) query = query.limit(params.limit);
-  if (params.offset !== undefined) query = (query as any).range(params.offset, (params.offset || 0) + (params.limit || 50) - 1);
+  if (params.offset !== undefined) {
+    const from = params.offset;
+    const to = (params.offset || 0) + (params.limit || 50) - 1;
+    query = query.range(from, to);
+  }
 
   const { data, error } = await query;
   if (error) {
@@ -65,16 +69,17 @@ export async function getEntityBySlug(kind: EntityKind, slug: string): Promise<A
 
 export interface UpsertParams {
   kind: EntityKind;
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
 }
 
 export async function upsertEntity(params: UpsertParams): Promise<AnyEntity | null> {
   const table = tableFor(params.kind);
-  const clean: Record<string, any> = { ...params.payload };
-  if ('tags' in clean) clean.tags = normalizeTags(clean.tags);
-  if ('description' in clean) clean.description = normalizeString(clean.description);
-  if ('category' in clean) clean.category = normalizeString(clean.category);
+  const clean: Record<string, unknown> = { ...params.payload };
+  if ('tags' in clean) clean.tags = normalizeTags(clean.tags as string | string[] | null | undefined);
+  if ('description' in clean) clean.description = normalizeString(clean.description as string | null | undefined);
+  if ('category' in clean) clean.category = normalizeString(clean.category as string | null | undefined);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase.from(table) as any)
     .upsert(clean, { onConflict: 'slug' })
     .select()
