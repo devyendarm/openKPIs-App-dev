@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { STATUS } from '@/lib/supabase/auth';
 import { fetchKpiBySlug } from '@/lib/server/kpis';
+import { getUserRoleServer } from '@/lib/roles/server';
 import KPIEditClient, { type EditableKpi } from './KPIEditClient';
 
 export const dynamic = 'force-dynamic';
@@ -49,13 +50,18 @@ export default async function KPIEditPage({ params }: { params: Promise<{ slug: 
     null;
 
   const isOwner = !!userName && kpi.created_by === userName;
+  const role = await getUserRoleServer();
+  const isEditor = role === 'admin' || role === 'editor';
+  const canEditDraft = (isOwner || isEditor) && kpi.status === STATUS.DRAFT;
 
-  if (!isOwner || kpi.status !== STATUS.DRAFT) {
+  if (!canEditDraft) {
     return (
       <main style={{ padding: '2rem', textAlign: 'center' }}>
         <h1>Edit unavailable</h1>
         <p style={{ color: 'var(--ifm-color-emphasis-700)' }}>
-          Once a KPI is published it can only be updated through Editorial Review.
+          {kpi.status !== STATUS.DRAFT
+            ? 'Once a KPI is published it can only be updated through Editorial Review.'
+            : 'You do not have permission to edit this draft. Only the owner or an editor can edit drafts.'}
         </p>
         <Link href={`/kpis/${slug}`} style={{ color: 'var(--ifm-color-primary)' }}>
           ← Back to KPI

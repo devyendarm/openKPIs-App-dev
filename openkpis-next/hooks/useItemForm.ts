@@ -91,69 +91,62 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
     setError(null);
 
     try {
-      const userName = currentUser.user_metadata?.user_name || currentUser.email || 'unknown';
-      const plural = pluralize(type);
-      const tableName = withTablePrefix(plural);
       const slug = formData.slug || generateSlug(formData.name);
 
-      const { data: existing } = await (supabase
-        .from(tableName) as any)
-        .select('id')
-        .eq('slug', slug)
-        .maybeSingle();
+      // Call unified API route that handles:
+      // 1. Item creation
+      // 2. Contribution record creation
+      // 3. GitHub sync
+      const response = await fetch('/api/items/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          type,
+          name: formData.name.trim(),
+          slug,
+          description: formData.description || undefined,
+          category: formData.category || undefined,
+          tags: formData.tags || [],
+          formula: formData.formula || undefined,
+        }),
+      });
 
-      if (existing) {
-        setError('An item with this slug already exists. Please choose a different name.');
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Handle API errors
+        const errorMessage = data.error || `Failed to create ${type}. Status: ${response.status}`;
+        setError(errorMessage);
         setSaving(false);
         return;
       }
 
-      const insertPayload: Record<string, any> = {
-        name: formData.name,
-        description: formData.description,
-        slug,
-        category: formData.category,
-        tags: formData.tags,
-        status: 'draft',
-        created_by: userName,
-        created_at: new Date().toISOString(),
-      };
-
-      if (type === 'kpi' || type === 'metric') {
-        insertPayload.formula = formData.formula || null;
-      }
-
-      const { data: created, error: insertError } = await (supabase
-        .from(tableName) as any)
-        .insert(insertPayload)
-        .select()
-        .single();
-
-      if (insertError || !created) {
-        setError(insertError?.message || 'Failed to create item.');
+      if (!data.success || !data.item) {
+        setError('Item was created but response was invalid. Please refresh and check.');
         setSaving(false);
         return;
       }
 
-      // Trigger GitHub sync (fire and forget - don't wait for it)
-      try {
-        fetch(`/api/${plural}/${created.id}/sync-github`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'created' }),
-        }).catch(() => {
-          // Ignore errors - GitHub sync is non-blocking
-        });
-      } catch {
-        // Ignore errors - GitHub sync is non-blocking
+      // Log GitHub sync status (non-blocking)
+      if (data.github && !data.github.success) {
+        console.warn('GitHub sync failed (non-critical):', data.github.error);
+        // Don't show error to user - item was created successfully
       }
 
-      // Reset saving state before redirect
+      // Reset saving state
       setSaving(false);
+
+      // Use window.location.href for full page reload to ensure clean state
+      // This avoids race conditions with router.push()
+      const redirectTo = afterCreateRedirect?.({ 
+        id: data.item.id, 
+        slug: data.item.slug 
+      }) ?? `/${pluralize(type)}`;
       
-      // Redirect to the edit page or list page
-      const redirectTo = afterCreateRedirect?.({ id: created.id, slug }) ?? `/${plural}`;
-      router.push(redirectTo);
+      window.location.href = redirectTo;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to create item.';
       setError(message);

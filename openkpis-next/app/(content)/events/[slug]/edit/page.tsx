@@ -4,6 +4,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { STATUS } from '@/lib/supabase/auth';
 import { fetchEventBySlug } from '@/lib/server/events';
 import { collectUserIdentifiers } from '@/lib/server/entities';
+import { getUserRoleServer } from '@/lib/roles/server';
 import EventEditClient from './EventEditClient';
 
 export const dynamic = 'force-dynamic';
@@ -46,13 +47,18 @@ export default async function EventEditPage({ params }: { params: Promise<{ slug
 
   const identifiers = collectUserIdentifiers(user);
   const isOwner = event.created_by ? identifiers.includes(event.created_by) : false;
+  const role = await getUserRoleServer();
+  const isEditor = role === 'admin' || role === 'editor';
+  const canEditDraft = (isOwner || isEditor) && event.status === STATUS.DRAFT;
 
-  if (!isOwner || event.status !== STATUS.DRAFT) {
+  if (!canEditDraft) {
     return (
       <main style={{ padding: '2rem', textAlign: 'center' }}>
         <h1>Edit unavailable</h1>
         <p style={{ color: 'var(--ifm-color-emphasis-600)' }}>
-          Once an event is published it can only be updated through Editorial Review.
+          {event.status !== STATUS.DRAFT
+            ? 'Once an event is published it can only be updated through Editorial Review.'
+            : 'You do not have permission to edit this draft. Only the owner or an editor can edit drafts.'}
         </p>
         <Link href={`/events/${slug}`} style={{ color: 'var(--ifm-color-primary)' }}>
           ← Back to Event

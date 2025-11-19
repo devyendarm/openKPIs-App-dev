@@ -45,13 +45,21 @@ export async function POST(
       return NextResponse.json({ error: 'Dashboard not found' }, { status: 404 });
     }
 
-    const userLogin = dashboard.created_by || 'unknown';
+    // Use last_modified_by for edits (Editor), created_by for creates (Contributor)
+    const userLogin = (action === 'edited' && dashboard.last_modified_by) 
+      ? dashboard.last_modified_by 
+      : (dashboard.created_by || 'unknown');
+    const contributorName = dashboard.created_by || 'unknown';
+    const editorName = dashboard.last_modified_by || null;
+    
     const result = await syncToGitHub({
       tableName: 'dashboards',
       record: dashboard,
       action,
       userLogin,
-      userName: dashboard.created_by ?? undefined,
+      userName: userLogin,
+      contributorName,
+      editorName,
     });
 
     if (!result.success) {

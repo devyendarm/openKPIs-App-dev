@@ -29,13 +29,21 @@ export async function POST(
       return NextResponse.json({ error: 'Metric not found' }, { status: 404 });
     }
 
-    const userLogin = metric.created_by || 'unknown';
+    // Use last_modified_by for edits (Editor), created_by for creates (Contributor)
+    const userLogin = (action === 'edited' && metric.last_modified_by) 
+      ? metric.last_modified_by 
+      : (metric.created_by || 'unknown');
+    const contributorName = metric.created_by || 'unknown';
+    const editorName = metric.last_modified_by || null;
+    
     const result = await syncToGitHub({
       tableName: 'metrics',
       record: metric,
       action,
       userLogin,
-      userName: metric.created_by ?? undefined,
+      userName: userLogin,
+      contributorName,
+      editorName,
     });
 
     if (!result.success) {

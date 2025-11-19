@@ -29,13 +29,21 @@ export async function POST(
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
 
-    const userLogin = event.created_by || 'unknown';
+    // Use last_modified_by for edits (Editor), created_by for creates (Contributor)
+    const userLogin = (action === 'edited' && event.last_modified_by) 
+      ? event.last_modified_by 
+      : (event.created_by || 'unknown');
+    const contributorName = event.created_by || 'unknown';
+    const editorName = event.last_modified_by || null;
+    
     const result = await syncToGitHub({
       tableName: 'events',
       record: event,
       action,
       userLogin,
-      userName: event.created_by ?? undefined,
+      userName: userLogin,
+      contributorName,
+      editorName,
     });
 
     if (!result.success) {

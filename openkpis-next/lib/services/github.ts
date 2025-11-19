@@ -6,14 +6,9 @@
 import { Octokit } from '@octokit/rest';
 import { createAppAuth } from '@octokit/auth-app';
 
-// Resolve owner/repo allowing DEV fallbacks
-const GITHUB_OWNER = (process.env.GITHUB_REPO_OWNER || process.env.GITHUB_REPO_OWNER_DEV || 'devyendarm');
-const GITHUB_CONTENT_REPO = (
-  process.env.GITHUB_CONTENT_REPO_NAME ||
-  process.env.GITHUB_CONTENT_REPO ||
-  process.env.GITHUB_CONTENT_REPO_NAME_DEV ||
-  'openKPIs-Content'
-);
+// Note: Content PRs go to GITHUB_CONTENT_REPO_NAME repository (not the app repo)
+const GITHUB_OWNER = process.env.GITHUB_REPO_OWNER || 'devyendarm';
+const GITHUB_CONTENT_REPO = process.env.GITHUB_CONTENT_REPO_NAME || process.env.GITHUB_CONTENT_REPO || 'openKPIs-Content';
 
 interface EntityRecord {
   id?: string;
@@ -35,6 +30,8 @@ export interface GitHubSyncParams {
   userLogin: string;
   userName?: string;
   userEmail?: string;
+  contributorName?: string; // Original contributor (created_by)
+  editorName?: string | null; // Editor who made the edit (last_modified_by)
 }
 
 export async function syncToGitHub(params: GitHubSyncParams): Promise<{
@@ -47,13 +44,12 @@ export async function syncToGitHub(params: GitHubSyncParams): Promise<{
   error?: string;
 }> {
   try {
-    // Resolve credentials with DEV fallbacks
-    const appId = process.env.GITHUB_APP_ID || process.env.GITHUB_APP_ID_DEV;
+    const appId = process.env.GITHUB_APP_ID;
     const privateKey = resolvePrivateKey();
-    const installationIdStr = process.env.GITHUB_INSTALLATION_ID || process.env.GITHUB_INSTALLATION_ID_DEV;
+    const installationIdStr = process.env.GITHUB_INSTALLATION_ID;
 
     if (!appId || !privateKey || !installationIdStr) {
-      throw new Error('GitHub credentials not configured (check GITHUB_APP_ID(_DEV), GITHUB_INSTALLATION_ID(_DEV), GITHUB_APP_PRIVATE_KEY(_DEV))');
+      throw new Error('GitHub credentials not configured (check GITHUB_APP_ID, GITHUB_INSTALLATION_ID, GITHUB_APP_PRIVATE_KEY_B64)');
     }
 
     const installationId = parseInt(installationIdStr, 10);
@@ -124,6 +120,13 @@ export async function syncToGitHub(params: GitHubSyncParams): Promise<{
       },
     });
 
+    // Build PR body with contributor and editor information
+    let prBody = `**Contributed by**: @${params.contributorName || params.userLogin}\n`;
+    if (params.action === 'edited' && params.editorName && params.editorName !== params.contributorName) {
+      prBody += `**Edited by**: @${params.editorName}\n`;
+    }
+    prBody += `\n**Action**: ${params.action}\n**Type**: ${params.tableName}\n\n---\n\n${params.record.description || 'No description provided.'}`;
+
     // Create PR
     const { data: prData } = await octokit.pulls.create({
       owner: GITHUB_OWNER,
@@ -133,7 +136,7 @@ export async function syncToGitHub(params: GitHubSyncParams): Promise<{
         : `Update ${params.tableName.slice(0, -1)}: ${params.record.name}`,
       head: branchName,
       base: 'main',
-      body: `**Contributed by**: @${params.userLogin}\n\n**Action**: ${params.action}\n**Type**: ${params.tableName}\n\n---\n\n${params.record.description || 'No description provided.'}`,
+      body: prBody,
       maintainer_can_modify: true,
     });
 
@@ -156,29 +159,12 @@ export async function syncToGitHub(params: GitHubSyncParams): Promise<{
 }
 
 function resolvePrivateKey(): string | undefined {
-  // Prefer explicit DEV, then PROD
-  const pemCandidates = [
-    process.env.GITHUB_APP_PRIVATE_KEY_DEV,
-    process.env.GITHUB_APP_PRIVATE_KEY,
-  ].filter(Boolean) as string[];
+  // Use GITHUB_APP_PRIVATE_KEY_B64 from environment
+  const b64Key = process.env.GITHUB_APP_PRIVATE_KEY_B64;
 
-  const b64Candidates = [
-    process.env.GITHUB_APP_PRIVATE_KEY_B64_DEV,
-    process.env.GITHUB_APP_PRIVATE_KEY_B64,
-  ].filter(Boolean) as string[];
-
-  for (const raw of pemCandidates) {
-    // Remove surrounding quotes if any and normalize newlines
-    let key = raw.trim().replace(/^"(.*)"$/s, '$1');
-    key = key.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
-    if (key.includes('BEGIN') && key.includes('END')) {
-      return key;
-    }
-  }
-
-  for (const b64 of b64Candidates) {
+  if (b64Key) {
     try {
-      const key = Buffer.from(b64.trim(), 'base64').toString('utf8');
+      const key = Buffer.from(b64Key.trim(), 'base64').toString('utf8');
       if (key.includes('BEGIN') && key.includes('END')) {
         return key.replace(/\r\n/g, '\n');
       }

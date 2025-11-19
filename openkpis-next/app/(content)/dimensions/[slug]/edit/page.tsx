@@ -4,6 +4,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { STATUS } from '@/lib/supabase/auth';
 import { fetchDimensionBySlug } from '@/lib/server/dimensions';
 import { collectUserIdentifiers } from '@/lib/server/entities';
+import { getUserRoleServer } from '@/lib/roles/server';
 import DimensionEditClient from './DimensionEditClient';
 
 export const dynamic = 'force-dynamic';
@@ -46,13 +47,18 @@ export default async function DimensionEditPage({ params }: { params: Promise<{ 
 
   const identifiers = collectUserIdentifiers(user);
   const isOwner = dimension.created_by ? identifiers.includes(dimension.created_by) : false;
+  const role = await getUserRoleServer();
+  const isEditor = role === 'admin' || role === 'editor';
+  const canEditDraft = (isOwner || isEditor) && dimension.status === STATUS.DRAFT;
 
-  if (!isOwner || dimension.status !== STATUS.DRAFT) {
+  if (!canEditDraft) {
     return (
       <main style={{ padding: '2rem', textAlign: 'center' }}>
         <h1>Edit unavailable</h1>
         <p style={{ color: 'var(--ifm-color-emphasis-600)' }}>
-          Once a dimension is published it can only be updated through Editorial Review.
+          {dimension.status !== STATUS.DRAFT
+            ? 'Once a dimension is published it can only be updated through Editorial Review.'
+            : 'You do not have permission to edit this draft. Only the owner or an editor can edit drafts.'}
         </p>
         <Link href={`/dimensions/${slug}`} style={{ color: 'var(--ifm-color-primary)' }}>
           ← Back to Dimension

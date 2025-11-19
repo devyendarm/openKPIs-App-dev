@@ -29,13 +29,21 @@ export async function POST(
       return NextResponse.json({ error: 'Dimension not found' }, { status: 404 });
     }
 
-    const userLogin = dimension.created_by || 'unknown';
+    // Use last_modified_by for edits (Editor), created_by for creates (Contributor)
+    const userLogin = (action === 'edited' && dimension.last_modified_by) 
+      ? dimension.last_modified_by 
+      : (dimension.created_by || 'unknown');
+    const contributorName = dimension.created_by || 'unknown';
+    const editorName = dimension.last_modified_by || null;
+    
     const result = await syncToGitHub({
       tableName: 'dimensions',
       record: dimension,
       action,
       userLogin,
-      userName: dimension.created_by ?? undefined,
+      userName: userLogin,
+      contributorName,
+      editorName,
     });
 
     if (!result.success) {

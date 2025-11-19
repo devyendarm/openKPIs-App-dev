@@ -35,14 +35,22 @@ export async function POST(
       );
     }
 
-    // Use central GitHub service with App auth
-    const userLogin = kpi.created_by || 'unknown';
+    // Use last_modified_by for edits (Editor), created_by for creates (Contributor)
+    // This ensures Editor edits show Editor as author, but Contributor remains in PR body
+    const userLogin = (action === 'edited' && kpi.last_modified_by) 
+      ? kpi.last_modified_by 
+      : (kpi.created_by || 'unknown');
+    const contributorName = kpi.created_by || 'unknown';
+    const editorName = kpi.last_modified_by || null;
+    
     const result = await syncToGitHub({
       tableName: 'kpis',
       record: kpi,
       action,
       userLogin,
-      userName: kpi.created_by,
+      userName: userLogin,
+      contributorName,
+      editorName,
     });
 
     if (!result.success) {

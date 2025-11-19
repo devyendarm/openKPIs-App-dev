@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { fetchDashboardBySlug } from '@/lib/server/dashboards';
 import { collectUserIdentifiers } from '@/lib/server/entities';
+import { getUserRoleServer } from '@/lib/roles/server';
 import DashboardEditClient from './DashboardEditClient';
 import { STATUS } from '@/lib/supabase/auth';
 
@@ -46,13 +47,18 @@ export default async function DashboardEditPage({ params }: { params: Promise<{ 
 
   const identifiers = collectUserIdentifiers(user);
   const isOwner = dashboard.created_by ? identifiers.includes(dashboard.created_by) : false;
+  const role = await getUserRoleServer();
+  const isEditor = role === 'admin' || role === 'editor';
+  const canEditDraft = (isOwner || isEditor) && dashboard.status === STATUS.DRAFT;
 
-  if (!isOwner || dashboard.status !== STATUS.DRAFT) {
+  if (!canEditDraft) {
     return (
       <main style={{ padding: '2rem', textAlign: 'center' }}>
         <h1>Edit unavailable</h1>
         <p style={{ color: 'var(--ifm-color-emphasis-600)' }}>
-          Once a dashboard is published it can only be updated through Editorial Review.
+          {dashboard.status !== STATUS.DRAFT
+            ? 'Once a dashboard is published it can only be updated through Editorial Review.'
+            : 'You do not have permission to edit this draft. Only the owner or an editor can edit drafts.'}
         </p>
         <Link href={`/dashboards/${slug}`} style={{ color: 'var(--ifm-color-primary)' }}>
           ← Back to Dashboard

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { STATUS } from '@/lib/supabase/auth';
 import { fetchMetricBySlug } from '@/lib/server/metrics';
+import { getUserRoleServer } from '@/lib/roles/server';
 import MetricEditClient from './MetricEditClient';
 
 export const dynamic = 'force-dynamic';
@@ -49,13 +50,18 @@ export default async function MetricEditPage({ params }: { params: Promise<{ slu
     null;
 
   const isOwner = !!userName && metric.created_by === userName;
+  const role = await getUserRoleServer();
+  const isEditor = role === 'admin' || role === 'editor';
+  const canEditDraft = (isOwner || isEditor) && metric.status === STATUS.DRAFT;
 
-  if (!isOwner || metric.status !== STATUS.DRAFT) {
+  if (!canEditDraft) {
     return (
       <main style={{ padding: '2rem', textAlign: 'center' }}>
         <h1>Edit unavailable</h1>
         <p style={{ color: 'var(--ifm-color-emphasis-700)' }}>
-          Once a metric is published it can only be updated through Editorial Review.
+          {metric.status !== STATUS.DRAFT
+            ? 'Once a metric is published it can only be updated through Editorial Review.'
+            : 'You do not have permission to edit this draft. Only the owner or an editor can edit drafts.'}
         </p>
         <Link href={`/metrics/${slug}`} style={{ color: 'var(--ifm-color-primary)' }}>
           ← Back to Metric
