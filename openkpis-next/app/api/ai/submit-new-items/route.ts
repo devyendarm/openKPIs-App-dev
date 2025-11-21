@@ -37,17 +37,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get current user
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) {
+    // Get current user (validated)
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (!user) {
+      console.error('[Submit New Items] Auth error (getUser):', userError);
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
       );
     }
 
-    const userName = session.user.user_metadata?.user_name || session.user.email;
-    const userId = session.user.id;
+    const userName = user.user_metadata?.user_name || user.email;
+    const userId = user.id;
 
     const submittedIds: string[] = [];
 
@@ -105,9 +106,9 @@ export async function POST(request: NextRequest) {
           record_id: newItem.id,
           action: 'created',
           user_login: userName,
-          user_name: session.user.user_metadata?.full_name || userName,
-          user_email: session.user.email,
-          user_avatar_url: session.user.user_metadata?.avatar_url,
+          user_name: user.user_metadata?.full_name || userName,
+          user_email: user.email,
+          user_avatar_url: user.user_metadata?.avatar_url,
           changes: item,
         });
 

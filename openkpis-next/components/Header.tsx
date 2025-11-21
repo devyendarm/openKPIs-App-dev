@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import GitHubSignIn from './GitHubSignIn';
+import PrismHighlighter from './PrismHighlighter';
 
 export default function Header() {
   const router = useRouter();
@@ -31,6 +32,7 @@ export default function Header() {
 
   return (
     <header className="site-header">
+      <PrismHighlighter />
       <div className="header-inner">
         {/* Logo & Brand */}
         <Link href="/" prefetch={false} className="brand-link">

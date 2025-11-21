@@ -51,13 +51,20 @@ export default function AuthClientProvider({
             const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : '') + window.location.hash;
             window.history.replaceState({}, '', newUrl);
             
-            // Force a session refresh after OAuth callback
-            const { data } = await supabase.auth.getSession();
-            if (mounted && data.session) {
-              setUser(data.session.user);
+            // Force a session refresh after OAuth callback and load a validated user
+            const { data: sessionData } = await supabase.auth.getSession();
+            const { data: userData } = await supabase.auth.getUser();
+
+            if (mounted) {
+              const nextUser = userData.user ?? sessionData.session?.user ?? null;
+              setUser(nextUser);
               try {
-                const r = await getUserRoleClient();
-                if (mounted) setRole(r);
+                if (nextUser) {
+                  const r = await getUserRoleClient();
+                  if (mounted) setRole(r);
+                } else {
+                  setRole('contributor');
+                }
               } catch (err) {
                 console.error('Error resolving user role after sign-in:', err);
                 if (mounted) setRole('contributor');
@@ -77,10 +84,17 @@ export default function AuthClientProvider({
           } catch (err) {
             console.error('Error applying Supabase session on client:', err);
           }
-        } else if (!initialSession) {
-          const { data } = await supabase.auth.getSession();
-          const currentUser = data.session?.user ?? null;
+        }
+
+        if (!initialSession) {
+          // No server session was provided; ask Supabase for the current session and user.
+          const [{ data: sessionData }, { data: userData }] = await Promise.all([
+            supabase.auth.getSession(),
+            supabase.auth.getUser(),
+          ]);
           if (!mounted) return;
+
+          const currentUser = userData.user ?? sessionData.session?.user ?? null;
           setUser(currentUser);
           if (currentUser) {
             const r = await getUserRoleClient();

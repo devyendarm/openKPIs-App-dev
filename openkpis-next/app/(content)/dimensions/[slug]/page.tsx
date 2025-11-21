@@ -5,9 +5,10 @@ import GiscusComments from '@/components/GiscusComments';
 import Sidebar from '@/components/Sidebar';
 import TableOfContents from '@/components/TableOfContents';
 import LikeButton from '@/components/LikeButton';
-import AddToAnalysisButton from '@/components/AddToAnalysisButton';
 import { fetchDimensionBySlug } from '@/lib/server/dimensions';
 import { collectUserIdentifiers } from '@/lib/server/entities';
+import { GroupedFields } from '@/components/detail/GroupedFields';
+import type { GroupConfig } from '@/src/types/fields';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -48,6 +49,42 @@ export default async function DimensionDetailPage({ params }: { params: Promise<
   }
 
   const canEdit = isOwner && dimension.status === 'draft';
+
+  const detailGroups: GroupConfig[] = [
+    {
+      id: 'classification',
+      title: 'Classification',
+      layout: 'rows',
+      fields: [
+        { key: 'category', label: 'Category', value: dimension.category },
+        {
+          key: 'tags',
+          label: 'Tags',
+          value: (dimension.tags ?? []).join(', '),
+        },
+      ],
+    },
+    {
+      id: 'governance',
+      title: 'Governance',
+      layout: 'columns',
+      columns: 2,
+      fields: [
+        {
+          key: 'created-by',
+          label: 'Created by',
+          value: dimension.created_by,
+        },
+        {
+          key: 'created-at',
+          label: 'Created at',
+          value: dimension.created_at
+            ? new Date(dimension.created_at).toLocaleDateString()
+            : null,
+        },
+      ],
+    },
+  ];
 
   return (
     <main style={{ maxWidth: '100%', margin: '0 auto', padding: '2rem 1rem', overflowX: 'hidden' }}>
@@ -94,12 +131,6 @@ export default async function DimensionDetailPage({ params }: { params: Promise<
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <LikeButton itemType="dimension" itemId={dimension.id} itemSlug={dimension.slug} />
-                <AddToAnalysisButton
-                  itemType="dimension"
-                  itemId={dimension.id}
-                  itemSlug={dimension.slug}
-                  itemName={dimension.name}
-                />
                 {canEdit && (
                   <Link
                     href={`/dimensions/${slug}/edit`}
@@ -119,23 +150,24 @@ export default async function DimensionDetailPage({ params }: { params: Promise<
             </div>
           </div>
           <section id="details" style={{ marginBottom: '3rem' }}>
-            <h2 id="dimension-details" style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem' }}>Dimension Details</h2>
-            <div style={{ backgroundColor: 'var(--ifm-color-emphasis-50)', borderRadius: '12px', padding: '2rem' }}>
-              {dimension.category && <div style={{ marginBottom: '1rem' }}><strong>Category:</strong> {dimension.category}</div>}
-              {dimension.tags.length > 0 && (
-                <div style={{ marginBottom: '1rem' }}>
-                  <strong>Tags:</strong>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
-                    {dimension.tags.map((tag) => (
-                      <span key={tag} style={{ padding: '0.25rem 0.75rem', backgroundColor: 'var(--ifm-color-primary)', color: 'white', borderRadius: '4px', fontSize: '0.875rem' }}>{tag}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div style={{ marginBottom: '0.75rem' }}><strong>Created by:</strong> {dimension.created_by}</div>
-              {dimension.created_at && (
-                <div><strong>Created at:</strong> {new Date(dimension.created_at).toLocaleDateString()}</div>
-              )}
+            <h2
+              id="dimension-details"
+              style={{
+                fontSize: '1.5rem',
+                fontWeight: '600',
+                marginBottom: '1.5rem',
+              }}
+            >
+              Dimension Details
+            </h2>
+            <div
+              style={{
+                backgroundColor: 'var(--ifm-color-emphasis-50)',
+                borderRadius: '12px',
+                padding: '2rem',
+              }}
+            >
+              <GroupedFields groups={detailGroups} />
             </div>
           </section>
 

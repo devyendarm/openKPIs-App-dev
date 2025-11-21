@@ -2,10 +2,11 @@ import React from 'react';
 import Link from 'next/link';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import LikeButton from '@/components/LikeButton';
-import AddToAnalysisButton from '@/components/AddToAnalysisButton';
 import { STATUS } from '@/lib/supabase/auth';
 import { fetchMetricBySlug } from '@/lib/server/metrics';
 import { collectUserIdentifiers } from '@/lib/server/entities';
+import { GroupedFields } from '@/components/detail/GroupedFields';
+import type { GroupConfig } from '@/src/types/fields';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -51,6 +52,34 @@ export default async function MetricDetailPage({ params }: { params: Promise<{ s
 
   const canEdit = isOwner && metric.status === STATUS.DRAFT;
 
+  const governanceGroups: GroupConfig[] = [
+    {
+      id: 'governance',
+      title: 'Governance',
+      layout: 'columns',
+      columns: 2,
+      fields: [
+        {
+          key: 'created-by',
+          label: 'Created by',
+          value: metric.created_by,
+        },
+        {
+          key: 'created-on',
+          label: 'Created on',
+          value: metric.created_at
+            ? new Date(metric.created_at).toLocaleDateString()
+            : null,
+        },
+        {
+          key: 'status',
+          label: 'Status',
+          value: metric.status ? metric.status.toUpperCase() : null,
+        },
+      ],
+    },
+  ];
+
   return (
     <main style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1rem' }}>
       <Link href="/metrics" style={{ color: 'var(--ifm-color-primary)', textDecoration: 'none', fontSize: '0.875rem' }}>
@@ -88,7 +117,6 @@ export default async function MetricDetailPage({ params }: { params: Promise<{ s
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <LikeButton itemType="metric" itemId={metric.id} itemSlug={metric.slug} />
-          <AddToAnalysisButton itemType="metric" itemId={metric.id} itemSlug={metric.slug} itemName={metric.name} />
           {canEdit && (
             <Link
               href={`/metrics/${metric.slug}/edit`}
@@ -117,31 +145,8 @@ export default async function MetricDetailPage({ params }: { params: Promise<{ s
         </section>
       )}
 
-      <section style={{ marginTop: '2rem', display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-        {metric.created_by ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ifm-color-emphasis-500)' }}>
-              Created by
-            </span>
-            <span style={{ fontSize: '0.95rem', color: 'var(--ifm-color-emphasis-800)' }}>{metric.created_by}</span>
-          </div>
-        ) : null}
-        {metric.created_at ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ifm-color-emphasis-500)' }}>
-              Created on
-            </span>
-            <span style={{ fontSize: '0.95rem', color: 'var(--ifm-color-emphasis-800)' }}>{new Date(metric.created_at).toLocaleDateString()}</span>
-          </div>
-        ) : null}
-        {metric.status ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ifm-color-emphasis-500)' }}>
-              Status
-            </span>
-            <span style={{ fontSize: '0.95rem', color: 'var(--ifm-color-emphasis-800)' }}>{metric.status.toUpperCase()}</span>
-          </div>
-        ) : null}
+      <section style={{ marginTop: '2rem' }}>
+        <GroupedFields groups={governanceGroups} />
       </section>
     </main>
   );

@@ -2,7 +2,6 @@ import React from 'react';
 import Link from 'next/link';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import LikeButton from '@/components/LikeButton';
-import AddToAnalysisButton from '@/components/AddToAnalysisButton';
 import { fetchDashboardBySlug } from '@/lib/server/dashboards';
 import { collectUserIdentifiers } from '@/lib/server/entities';
 import { STATUS } from '@/lib/supabase/auth';
@@ -74,12 +73,6 @@ export default async function DashboardDetailPage({ params }: { params: Promise<
       {dashboard.description && <p style={{ color: 'var(--ifm-color-emphasis-700)' }}>{dashboard.description}</p>}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
         <LikeButton itemType="dashboard" itemId={dashboard.id} itemSlug={dashboard.slug} />
-        <AddToAnalysisButton
-          itemType="dashboard"
-          itemId={dashboard.id}
-          itemSlug={dashboard.slug}
-          itemName={dashboard.name}
-        />
         {canEdit && (
           <Link
             href={`/dashboards/${slug}/edit`}

@@ -1,0 +1,410 @@
+## Authoring Guide – Grouped Metadata Layouts for Item Pages
+
+This doc captures patterns for **custom formatting metadata** on KPI and other item pages, using **grouped sections**, **columns**, and **tables**. You can copy‑paste and adapt these snippets when updating layouts.
+
+---
+
+## 1. Core Types for Fields and Groups
+
+Define reusable types to describe fields and their grouping/layout. Put these in a shared types file (for example `src/types/fields.ts`).
+
+```ts
+// src/types/fields.ts
+
+export type FieldValue = string | number | null | undefined;
+
+export type FieldConfig = {
+  key: string;      // unique key
+  label: string;
+  value: FieldValue;
+};
+
+export type GroupLayout = 'rows' | 'columns' | 'table';
+
+export type GroupConfig = {
+  id: string;
+  title?: string;   // optional group heading ("Governance", "Business Context", etc.)
+  layout: GroupLayout;
+  columns?: number; // used only for 'columns' layout
+  fields: FieldConfig[];
+};
+```
+
+Key concepts:
+
+- **`FieldConfig`** = single label/value row.
+- **`GroupConfig`** = how a set of fields should be displayed (rows, columns, or table).
+- Each item page (KPI, metric, event, dimension) just builds an array of `GroupConfig` based on its own data.
+
+---
+
+## 2. Generic Renderer for Grouped Sections
+
+Create a single renderer that understands:
+
+- **rows** – fields stacked vertically
+- **columns** – fields in a CSS grid with N columns
+- **table** – classic HTML table with label/value columns
+
+```tsx
+// components/detail/GroupedFields.tsx
+import React from 'react';
+import type { GroupConfig } from '@/src/types/fields';
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+      <span
+        style={{
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          color: 'var(--ifm-color-emphasis-500)',
+        }}
+      >
+        {label}
+      </span>
+      <span style={{ fontSize: '0.95rem', color: 'var(--ifm-color-emphasis-800)' }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function renderGroupContent(group: GroupConfig) {
+  const visibleFields = group.fields.filter(
+    (f) => f.value !== null && f.value !== undefined && f.value !== '',
+  );
+
+  if (!visibleFields.length) return null;
+
+  if (group.layout === 'table') {
+    return (
+      <table
+        style={{
+          width: '100%',
+          borderCollapse: 'collapse',
+          fontSize: '0.9rem',
+        }}
+      >
+        <thead>
+          <tr>
+            <th
+              style={{
+                textAlign: 'left',
+                padding: '0.5rem',
+                borderBottom: '1px solid var(--ifm-color-emphasis-200)',
+              }}
+            >
+              Field
+            </th>
+            <th
+              style={{
+                textAlign: 'left',
+                padding: '0.5rem',
+                borderBottom: '1px solid var(--ifm-color-emphasis-200)',
+              }}
+            >
+              Value
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {visibleFields.map((field) => (
+            <tr key={field.key}>
+              <td
+                style={{
+                  padding: '0.5rem',
+                  verticalAlign: 'top',
+                  width: '30%',
+                }}
+              >
+                {field.label}
+              </td>
+              <td style={{ padding: '0.5rem', verticalAlign: 'top' }}>
+                {String(field.value)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+
+  const isColumns = group.layout === 'columns';
+  const columns = group.columns ?? 2;
+
+  return (
+    <div
+      style={
+        isColumns
+          ? {
+              display: 'grid',
+              gap: '1rem',
+              gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+            }
+          : {
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.75rem',
+            }
+      }
+    >
+      {visibleFields.map((field) => (
+        <DetailRow
+          key={field.key}
+          label={field.label}
+          value={String(field.value)}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function GroupedFields({ groups }: { groups: GroupConfig[] }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {groups.map((group) => {
+        const content = renderGroupContent(group);
+        if (!content) return null;
+
+        return (
+          <section key={group.id}>
+            {group.title && (
+              <h3
+                style={{
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  marginBottom: '0.75rem',
+                  color: 'var(--ifm-color-emphasis-600)',
+                }}
+              >
+                {group.title}
+              </h3>
+            )}
+            {content}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+```
+
+Usage notes:
+
+- Visibility is **data-driven** – empty values are automatically hidden.
+- Each group is rendered independently, so you can mix `rows`, `columns`, and `table` layouts on the same page.
+
+---
+
+## 3. KPI Page – Example Group Config (Columns + Grouped Sections)
+
+Example of building grouped metadata for a KPI detail page `Overview` section.
+
+```tsx
+// In openkpis-next/app/(content)/kpis/[slug]/page.tsx
+import { GroupedFields } from '@/components/detail/GroupedFields';
+import type { GroupConfig } from '@/src/types/fields';
+
+// inside the KPIDetailPage component, after you have `kpi`
+const overviewGroups: GroupConfig[] = [
+  {
+    id: 'governance',
+    title: 'Governance',
+    layout: 'columns',
+    columns: 2,
+    fields: [
+      {
+        key: 'created-by',
+        label: 'Created by',
+        value: kpi.created_by || 'Unknown',
+      },
+      {
+        key: 'created-on',
+        label: 'Created on',
+        value: kpi.created_at
+          ? new Date(kpi.created_at).toLocaleDateString()
+          : null,
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        value: kpi.status ? kpi.status.toUpperCase() : null,
+      },
+      {
+        key: 'tags',
+        label: 'Tags',
+        value: (kpi.tags ?? []).join(', '),
+      },
+    ],
+  },
+  {
+    id: 'business-context',
+    title: 'Business Context',
+    layout: 'columns',
+    columns: 2,
+    fields: [
+      { key: 'priority', label: 'Priority', value: kpi.priority },
+      { key: 'core-area', label: 'Core area', value: kpi.core_area },
+      { key: 'scope', label: 'Scope', value: kpi.scope },
+      {
+        key: 'industry',
+        label: 'Industry',
+        value: (kpi.industry ?? []).join(', '),
+      },
+    ],
+  },
+  {
+    id: 'technical',
+    title: 'Technical',
+    layout: 'columns',
+    columns: 2,
+    fields: [
+      { key: 'type', label: 'Type', value: kpi.kpi_type },
+      {
+        key: 'agg-window',
+        label: 'Aggregation window',
+        value: kpi.aggregation_window,
+      },
+    ],
+  },
+];
+
+// In the JSX:
+<section id="overview" style={{ marginBottom: '2.5rem' }}>
+  <h2
+    style={{
+      fontSize: '1.5rem',
+      fontWeight: 600,
+      marginBottom: '1rem',
+    }}
+  >
+    Overview
+  </h2>
+  <GroupedFields groups={overviewGroups} />
+</section>
+```
+
+To change the layout later:
+
+- switch `layout: 'columns'` → `'rows'` or `'table'`.
+- change `columns: 2` → any number of columns for that group.
+
+---
+
+## 4. Metrics / Events / Dimensions – Reuse with Different Configs
+
+The same renderer can be used on other item pages by supplying different group configs.
+
+### Metrics Example
+
+```tsx
+// In openkpis-next/app/(content)/metrics/[slug]/page.tsx
+import { GroupedFields } from '@/components/detail/GroupedFields';
+import type { GroupConfig } from '@/src/types/fields';
+
+// inside MetricDetailPage, after you have `metric`
+const metricGroups: GroupConfig[] = [
+  {
+    id: 'governance',
+    title: 'Governance',
+    layout: 'columns',
+    columns: 2,
+    fields: [
+      {
+        key: 'created-by',
+        label: 'Created by',
+        value: metric.created_by,
+      },
+      {
+        key: 'created-on',
+        label: 'Created on',
+        value: metric.created_at
+          ? new Date(metric.created_at).toLocaleDateString()
+          : null,
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        value: metric.status ? metric.status.toUpperCase() : null,
+      },
+    ],
+  },
+  {
+    id: 'classification',
+    title: 'Classification',
+    layout: 'rows',
+    fields: [
+      {
+        key: 'category',
+        label: 'Category',
+        value: metric.category,
+      },
+      {
+        key: 'tags',
+        label: 'Tags',
+        value: (metric.tags ?? []).join(', '),
+      },
+    ],
+  },
+];
+
+// Usage:
+<GroupedFields groups={metricGroups} />
+```
+
+### Events / Dimensions Example (Table Layout)
+
+```tsx
+// Example for an "Audit" or "History" block on events/dimensions
+const auditGroup: GroupConfig = {
+  id: 'audit',
+  title: 'Audit / History',
+  layout: 'table',
+  fields: [
+    { key: 'created-by', label: 'Created by', value: item.created_by },
+    {
+      key: 'created-on',
+      label: 'Created on',
+      value: item.created_at
+        ? new Date(item.created_at).toLocaleDateString()
+        : null,
+    },
+    {
+      key: 'last-modified-by',
+      label: 'Last modified by',
+      value: item.last_modified_by,
+    },
+    {
+      key: 'last-modified-on',
+      label: 'Last modified on',
+      value: item.last_modified_at
+        ? new Date(item.last_modified_at).toLocaleDateString()
+        : null,
+    },
+  ],
+};
+
+<GroupedFields groups={[auditGroup]} />
+```
+
+---
+
+## 5. How to Apply This Pattern
+
+- **Step 1**: Add `FieldConfig` / `GroupConfig` types (`src/types/fields.ts`).
+- **Step 2**: Add `GroupedFields` renderer (`components/detail/GroupedFields.tsx`).
+- **Step 3**: On each detail page (KPI, metric, event, dimension), build one or more `GroupConfig[]`s using that entity’s data.
+- **Step 4**: Replace existing ad‑hoc grids/rows with:
+
+```tsx
+<GroupedFields groups={/* your groups here */} />
+```
+
+From that point on, **layout changes are purely config changes**, not component rewrites.
+
+

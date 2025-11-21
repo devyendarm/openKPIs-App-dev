@@ -5,7 +5,6 @@ import Link from 'next/link';
 import type { EntityKind } from '@/src/types/entities';
 import { useEntity } from '@/hooks/useEntity';
 import LikeButton from '@/components/LikeButton';
-import AddToAnalysisButton from '@/components/AddToAnalysisButton';
 
 interface Props {
 	kind: EntityKind;
@@ -72,7 +71,6 @@ export default function EntityDetail({ kind, slug }: Props) {
 			{/* Actions */}
 			<div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem' }}>
 				<LikeButton itemType={kind} itemId={item.id} itemSlug={item.slug} />
-				<AddToAnalysisButton itemType={kind} itemId={item.id} itemSlug={item.slug} itemName={item.name} />
 			</div>
 		</main>
 	);

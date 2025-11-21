@@ -58,8 +58,39 @@ type AdditionalKpiFields = {
 
 export type EditableKpi = NormalizedKpi & AdditionalKpiFields;
 
-type KpiUpdatePayload = Omit<FormData, 'industry'> & {
+type KpiUpdatePayload = {
+  // Core fields
+  name: string;
+  description: string;
+  formula: string;
+  category: string;
+  tags: string[];
+
+  // Business context
   industry: string[];
+  priority: string;
+  core_area: string;
+  scope: string;
+
+  // Technical
+  kpi_type: string;
+  aggregation_window: string;
+
+  // Platform implementation
+  ga4_implementation: string;
+  adobe_implementation: string;
+  amplitude_implementation: string;
+
+  // Data mappings
+  data_layer_mapping: string;
+  xdm_mapping: string;
+
+  // SQL & documentation
+  sql_query: string;
+  calculation_notes: string;
+  details: string;
+
+  // Governance / audit
   status: KpiStatus;
   last_modified_by: string;
   last_modified_at: string;
@@ -151,10 +182,44 @@ export default function KPIEditClient({ kpi, slug, canEdit }: KPIEditClientProps
     setError(null);
 
     try {
-      const { industry: industryString, ...restFormData } = formData;
+      const { industry: industryString } = formData;
+
+      // Build a payload that matches the actual Supabase KPI columns.
+      // We intentionally do NOT send fields that are not yet in the schema
+      // (e.g. dependencies, measure, etc.) to avoid update failures.
       const updatePayload: KpiUpdatePayload = {
-        ...restFormData,
+        // Core
+        name: formData.name,
+        description: formData.description,
+        formula: formData.formula,
+        category: formData.category,
+        tags: formData.tags,
+
+        // Business context
         industry: industryString ? [industryString] : [],
+        priority: formData.priority,
+        core_area: formData.core_area,
+        scope: formData.scope,
+
+        // Technical
+        kpi_type: formData.kpi_type,
+        aggregation_window: formData.aggregation_window,
+
+        // Platform implementation
+        ga4_implementation: formData.ga4_implementation,
+        adobe_implementation: formData.adobe_implementation,
+        amplitude_implementation: formData.amplitude_implementation,
+
+        // Data mappings
+        data_layer_mapping: formData.data_layer_mapping,
+        xdm_mapping: formData.xdm_mapping,
+
+        // SQL & docs
+        sql_query: formData.sql_query,
+        calculation_notes: formData.calculation_notes,
+        details: formData.details,
+
+        // Governance
         status: 'draft' as KpiStatus,
         last_modified_by: userName,
         last_modified_at: new Date().toISOString(),
@@ -238,7 +303,7 @@ export default function KPIEditClient({ kpi, slug, canEdit }: KPIEditClientProps
             {saving ? 'Saving…' : 'Save All'}
           </button>
           <span style={{ fontSize: '0.825rem', color: 'var(--ifm-color-emphasis-600)', textAlign: 'right' }}>
-            Saves update the draft in Supabase. Publishing happens via Editorial Review.
+            Saved as draft, will be Published only after the Editorial Review.
           </span>
         </div>
       </div>

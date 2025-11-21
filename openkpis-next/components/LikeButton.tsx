@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import type { User } from '@supabase/supabase-js';
-import { supabase, getCurrentUser } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { withTablePrefix } from '@/src/types/entities';
+import { useAuth } from '@/app/providers/AuthClientProvider';
 
 interface LikeButtonProps {
   itemType: 'kpi' | 'event' | 'dimension' | 'metric' | 'dashboard';
@@ -23,18 +23,10 @@ type LikeRow = {
 };
 
 export default function LikeButton({ itemType, itemId, itemSlug }: LikeButtonProps) {
+  const { user } = useAuth();
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<User | null>(null);
-
-  useEffect(() => {
-    async function checkUser() {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-    }
-    void checkUser();
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -102,7 +94,10 @@ export default function LikeButton({ itemType, itemId, itemSlug }: LikeButtonPro
           .eq('item_type', itemType)
           .eq('item_id', itemId);
 
-        if (!error) {
+        if (error) {
+          console.error('Error unliking item:', error);
+          alert(error.message || 'Failed to remove like. Please try again.');
+        } else {
           setLiked(false);
           setLikeCount((prev) => Math.max(0, prev - 1));
         }
@@ -117,7 +112,10 @@ export default function LikeButton({ itemType, itemId, itemSlug }: LikeButtonPro
             item_slug: itemSlug,
           });
 
-        if (!error) {
+        if (error) {
+          console.error('Error liking item:', error);
+          alert(error.message || 'Failed to add like. Please try again.');
+        } else {
           setLiked(true);
           setLikeCount((prev) => prev + 1);
         }
@@ -133,7 +131,6 @@ export default function LikeButton({ itemType, itemId, itemSlug }: LikeButtonPro
   return (
     <button
       onClick={handleToggleLike}
-      disabled={loading || !user}
       style={{
         display: 'inline-flex',
         alignItems: 'center',

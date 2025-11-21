@@ -5,9 +5,10 @@ import GiscusComments from '@/components/GiscusComments';
 import Sidebar from '@/components/Sidebar';
 import TableOfContents from '@/components/TableOfContents';
 import LikeButton from '@/components/LikeButton';
-import AddToAnalysisButton from '@/components/AddToAnalysisButton';
 import { withTablePrefix } from '@/src/types/entities';
 import { collectUserIdentifiers } from '@/lib/server/entities';
+import { GroupedFields } from '@/components/detail/GroupedFields';
+import type { GroupConfig } from '@/src/types/fields';
 
 const eventsTable = withTablePrefix('events');
 
@@ -96,6 +97,46 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
 
   const canEdit = isOwner && normalizedEvent.status === 'draft';
 
+  const detailGroups: GroupConfig[] = [
+    {
+      id: 'classification',
+      title: 'Classification',
+      layout: 'rows',
+      fields: [
+        {
+          key: 'category',
+          label: 'Category',
+          value: normalizedEvent.category,
+        },
+        {
+          key: 'tags',
+          label: 'Tags',
+          value: (normalizedEvent.tags ?? []).join(', '),
+        },
+      ],
+    },
+    {
+      id: 'governance',
+      title: 'Governance',
+      layout: 'columns',
+      columns: 2,
+      fields: [
+        {
+          key: 'created-by',
+          label: 'Created by',
+          value: normalizedEvent.created_by,
+        },
+        {
+          key: 'created-at',
+          label: 'Created at',
+          value: normalizedEvent.created_at
+            ? new Date(normalizedEvent.created_at).toLocaleDateString()
+            : null,
+        },
+      ],
+    },
+  ];
+
   return (
     <main style={{ maxWidth: '100%', margin: '0 auto', padding: '2rem 1rem', overflowX: 'hidden' }}>
       <div style={{ 
@@ -141,12 +182,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <LikeButton itemType="event" itemId={normalizedEvent.id} itemSlug={normalizedEvent.slug} />
-                <AddToAnalysisButton
-                  itemType="event"
-                  itemId={normalizedEvent.id}
-                  itemSlug={normalizedEvent.slug}
-                  itemName={normalizedEvent.name}
-                />
                 {canEdit && (
                   <Link
                     href={`/events/${slug}/edit`}
@@ -166,23 +201,24 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
             </div>
           </div>
           <section id="details" style={{ marginBottom: '3rem' }}>
-            <h2 id="event-details" style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem' }}>Event Details</h2>
-            <div style={{ backgroundColor: 'var(--ifm-color-emphasis-50)', borderRadius: '12px', padding: '2rem' }}>
-              {normalizedEvent.category && <div style={{ marginBottom: '1rem' }}><strong>Category:</strong> {normalizedEvent.category}</div>}
-              {normalizedEvent.tags && normalizedEvent.tags.length > 0 && (
-                <div style={{ marginBottom: '1rem' }}>
-                  <strong>Tags:</strong>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
-                    {normalizedEvent.tags.map((tag: string) => (
-                      <span key={tag} style={{ padding: '0.25rem 0.75rem', backgroundColor: 'var(--ifm-color-primary)', color: 'white', borderRadius: '4px', fontSize: '0.875rem' }}>{tag}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div style={{ marginBottom: '0.75rem' }}><strong>Created by:</strong> {normalizedEvent.created_by}</div>
-              {normalizedEvent.created_at && (
-                <div><strong>Created at:</strong> {new Date(normalizedEvent.created_at).toLocaleDateString()}</div>
-              )}
+            <h2
+              id="event-details"
+              style={{
+                fontSize: '1.5rem',
+                fontWeight: '600',
+                marginBottom: '1.5rem',
+              }}
+            >
+              Event Details
+            </h2>
+            <div
+              style={{
+                backgroundColor: 'var(--ifm-color-emphasis-50)',
+                borderRadius: '12px',
+                padding: '2rem',
+              }}
+            >
+              <GroupedFields groups={detailGroups} />
             </div>
           </section>
 

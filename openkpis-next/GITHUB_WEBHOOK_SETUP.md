@@ -35,7 +35,6 @@ After selecting "Let me select individual events", check the following:
 ### 5. Set Secret
 - **Secret**: Enter a secure random string (e.g., generate with `openssl rand -hex 32`)
 - **Important**: Save this secret - you'll need it for the environment variable
-
 ### 6. Configure Environment Variable
 Set the secret in your deployment environment:
 

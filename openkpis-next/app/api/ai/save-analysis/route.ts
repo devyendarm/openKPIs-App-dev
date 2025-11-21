@@ -77,25 +77,13 @@ export async function POST(request: NextRequest) {
       aiExpanded,
     }: SaveAnalysisRequestBody = await request.json();
 
-    // Get current user - try getUser() first as it's more reliable for server-side
+    // Get current user - use getUser() as the canonical, validated identity
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    // If getUser() fails, try getSession() as fallback
-    let userId: string | null = null;
-    let currentUser: User | null = null;
-    if (user) {
-      userId = user.id;
-      currentUser = user;
-    } else {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        userId = session.user.id;
-        currentUser = session.user;
-      }
-    }
-    
+    const currentUser: User | null = user ?? null;
+    const userId: string | null = currentUser?.id ?? null;
+
     if (!userId || !currentUser) {
-      console.error('[Save Analysis] Auth error:', userError);
+      console.error('[Save Analysis] Auth error (getUser):', userError);
       return NextResponse.json(
         { error: 'Authentication required. Please sign in with GitHub to save your analysis.' },
         { status: 401 }

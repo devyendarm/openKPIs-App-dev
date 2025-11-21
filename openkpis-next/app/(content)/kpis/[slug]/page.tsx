@@ -6,10 +6,11 @@ import TableOfContents from '@/components/TableOfContents';
 import GiscusComments from '@/components/GiscusComments';
 import CodeBlockToolbar from '@/components/CodeBlockToolbar';
 import LikeButton from '@/components/LikeButton';
-import AddToAnalysisButton from '@/components/AddToAnalysisButton';
 import { STATUS } from '@/lib/supabase/auth';
 import { collectUserIdentifiers } from '@/lib/server/entities';
 import { fetchKpiBySlug, type NormalizedKpi } from '@/lib/server/kpis';
+import { GroupedFields } from '@/components/detail/GroupedFields';
+import type { GroupConfig } from '@/src/types/fields';
 
 type Heading = {
   id: string;
@@ -67,6 +68,60 @@ function renderRichTextBlock(id: string, title: string, content?: string | null)
   );
 }
 
+// Some legacy KPIs have SQL stored as a JSON array of strings with <br> tags
+// and an initial "sql" marker. Normalize that into clean multiline SQL text.
+function normalizeSqlQuery(raw?: string | null): string | null {
+  if (!raw) return null;
+  let text = raw;
+
+  // Try to parse JSON array form: ["sql<br>...", "<br> ..."]
+  try {
+    const trimmed = text.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        text = parsed.join('');
+      }
+    }
+  } catch {
+    // ignore JSON parse errors and fall back to raw string
+  }
+
+  // Replace HTML <br> tags with newlines
+  text = text.replace(/<br\s*\/?>/gi, '\n');
+
+  // Strip a leading "sql" marker if present (e.g. "sql\nSELECT..." or "sqlSELECT")
+  text = text.replace(/^\s*sql\s*/i, '');
+
+  return text;
+}
+
+// Some legacy KPIs have JSON mappings stored with <br> tags, optional "json" markers,
+// or even as JSON arrays of string fragments. Normalize into pretty-printed JSON.
+function normalizeJsonMapping(raw?: string | null): string | null {
+  if (!raw) return null;
+  let text = raw;
+
+  // Try to parse JSON if it looks like JSON
+  try {
+    const trimmed = text.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      const parsed = JSON.parse(trimmed);
+      return JSON.stringify(parsed, null, 2);
+    }
+  } catch {
+    // ignore parse errors and fall back to string normalization
+  }
+
+  // Replace HTML <br> tags with newlines
+  text = text.replace(/<br\s*\/?>/gi, '\n');
+
+  // Strip a leading "json" marker if present
+  text = text.replace(/^\s*json\s*/i, '');
+
+  return text;
+}
+
 function renderCodeBlock(id: string, title: string, code?: string | null, language?: string) {
   if (!code) return null;
   return (
@@ -85,7 +140,7 @@ function renderCodeBlock(id: string, title: string, code?: string | null, langua
             background: 'var(--ifm-color-emphasis-50)',
           }}
         >
-          <code>{code}</code>
+          <code className={language ? `language-${language}` : undefined}>{code}</code>
         </pre>
         <CodeBlockToolbar code={code} language={language} blockId={id} />
       </div>
@@ -157,101 +212,35 @@ export default async function KPIDetailPage({ params }: { params: Promise<{ slug
   const canEdit = isOwner && kpi.status === STATUS.DRAFT;
   const headings = buildHeadings(kpi);
 
-  const metadata = [
-    renderDetailRow('Created by', kpi.created_by || 'Unknown', 'created-by'),
-    renderDetailRow('Created on', kpi.created_at ? new Date(kpi.created_at).toLocaleDateString() : null, 'created-on'),
-    renderDetailRow('Last modified by', kpi.last_modified_by ?? undefined, 'last-modified-by'),
-    renderDetailRow('Last modified on', kpi.last_modified_at ? new Date(kpi.last_modified_at).toLocaleDateString() : null, 'last-modified-on'),
-    renderDetailRow('Status', kpi.status ? kpi.status.toUpperCase() : null, 'status'),
-    renderDetailRow('Priority', kpi.priority ?? undefined, 'priority'),
-    renderDetailRow('Core area', kpi.core_area ?? undefined, 'core-area'),
-    renderDetailRow('Scope', kpi.scope ?? undefined, 'scope'),
-    renderDetailRow('Type', kpi.kpi_type ?? undefined, 'type'),
-    renderDetailRow('Aggregation window', kpi.aggregation_window ?? undefined, 'aggregation-window'),
-  ].filter(Boolean);
-
   return (
-    <main style={{ maxWidth: '100%', margin: '0 auto', padding: '2rem 1rem', overflowX: 'hidden' }}>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(200px, 250px) minmax(0, 1fr) minmax(200px, 280px)',
-          gap: '1.5rem',
-          width: '100%',
-          maxWidth: '100%',
-        }}
-      >
+    <main className="page-main">
+      <div className="page-grid-3col">
         <Sidebar section="kpis" />
 
-        <article style={{ minWidth: 0, overflowWrap: 'break-word', wordWrap: 'break-word' }}>
-          <div
-            style={{
-              marginBottom: '2rem',
-              paddingBottom: '1.5rem',
-              borderBottom: '1px solid var(--ifm-color-emphasis-200)',
-            }}
-          >
-            <Link
-              href="/kpis"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                color: 'var(--ifm-color-primary)',
-                textDecoration: 'none',
-                marginBottom: '1rem',
-                fontSize: '0.875rem',
-              }}
-            >
+        <article className="detail-article">
+          <div className="detail-header">
+            <Link href="/kpis" className="detail-back-link">
               ← Back to KPIs
             </Link>
-            <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: '1rem' }}>
+            <div className="detail-header-row">
               <div style={{ flex: 1 }}>
-                <h1 style={{ fontSize: '2rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                <h1 className="detail-title">
                   {kpi.name}
                   {kpi.status === STATUS.DRAFT && (
-                    <span
-                      style={{
-                        marginLeft: '0.75rem',
-                        fontSize: '0.75rem',
-                        padding: '0.25rem 0.75rem',
-                        backgroundColor: '#fbbf24',
-                        color: '#78350f',
-                        borderRadius: '4px',
-                        fontWeight: 500,
-                      }}
-                    >
-                      Draft
-                    </span>
+                    <span className="badge-draft">Draft</span>
                   )}
                 </h1>
                 {kpi.description && (
-                  <p style={{ fontSize: '1.125rem', color: 'var(--ifm-color-emphasis-600)', lineHeight: 1.6 }}>
-                    {kpi.description}
-                  </p>
+                  <p className="detail-description">{kpi.description}</p>
                 )}
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div className="detail-header-actions">
                 <LikeButton itemType="kpi" itemId={kpi.id} itemSlug={kpi.slug} />
-                <AddToAnalysisButton
-                  itemType="kpi"
-                  itemId={kpi.id}
-                  itemSlug={kpi.slug}
-                  itemName={kpi.name}
-                />
                 {canEdit && (
                   <Link
                     href={`/kpis/${kpi.slug}/edit`}
-                    style={{
-                      padding: '0.75rem 1.5rem',
-                      backgroundColor: 'var(--ifm-color-primary)',
-                      color: '#fff',
-                      textDecoration: 'none',
-                      borderRadius: '8px',
-                      fontWeight: 500,
-                      whiteSpace: 'nowrap',
-                    }}
+                    className="btn btn-primary"
                   >
                     Edit
                   </Link>
@@ -260,32 +249,30 @@ export default async function KPIDetailPage({ params }: { params: Promise<{ slug
             </div>
           </div>
 
-          <section id="overview" style={{ marginBottom: '2.5rem' }}>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1rem' }}>Overview</h2>
-            <div
-              style={{
-                display: 'grid',
-                gap: '1rem',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                marginBottom: '1.5rem',
-              }}
-            >
-              {metadata}
-              {renderTokenPills('Tags', kpi.tags)}
-              {renderTokenPills('Industries', kpi.industry)}
-            </div>
-          </section>
-
-          {renderRichTextBlock('details', 'Business Details', kpi.details)}
-          {renderRichTextBlock('calculation-notes', 'Calculation Notes', kpi.calculation_notes)}
+          {renderRichTextBlock('details', 'Business Use case', kpi.details)}
+          {renderRichTextBlock('Priority', 'Importance of KPI', kpi.priority)}
+          {renderRichTextBlock('Core area', 'Core area of KPI Analysis', kpi.core_area ?? undefined)}
+          {renderRichTextBlock('Scope', 'Scope at which KPI is analyzed', kpi.scope ?? undefined)}
 
           {renderCodeBlock('formula', 'Formula', kpi.formula, 'text')}
-          {renderCodeBlock('sql-query', 'SQL Query', kpi.sql_query, 'sql')}
-          {renderCodeBlock('ga4-implementation', 'GA4 Implementation', kpi.ga4_implementation, 'javascript')}
-          {renderCodeBlock('adobe-implementation', 'Adobe Implementation', kpi.adobe_implementation, 'javascript')}
-          {renderCodeBlock('amplitude-implementation', 'Amplitude Implementation', kpi.amplitude_implementation, 'javascript')}
-          {renderCodeBlock('data-layer-mapping', 'Data Layer Mapping', kpi.data_layer_mapping, 'json')}
-          {renderCodeBlock('xdm-mapping', 'XDM Mapping', kpi.xdm_mapping, 'json')}
+          {renderCodeBlock('sql-query', 'SQL Query', normalizeSqlQuery(kpi.sql_query), 'sql')}
+          {renderRichTextBlock('calculation-notes', 'Calculation Notes', kpi.calculation_notes)}
+          <section id="overview" className="section" style={{ lineHeight: '2', marginBottom: '2rem' }}>
+            <h2 className="section-title">Events</h2>
+            {renderTokenPills('Google Analytics 4', kpi.ga4_implementation ? [kpi.ga4_implementation] : [])}
+            {renderTokenPills('Adobe', kpi.adobe_implementation ? [kpi.adobe_implementation] : [])}
+            {renderTokenPills('Amplitude', kpi.amplitude_implementation ? [kpi.amplitude_implementation] : [])}
+          </section>
+          {renderCodeBlock('data-layer-mapping', 'Data Layer Mapping', normalizeJsonMapping(kpi.data_layer_mapping), 'json')}
+          {renderCodeBlock('xdm-mapping', 'XDM Mapping', normalizeJsonMapping(kpi.xdm_mapping), 'json')}
+          <section id="overview" className="section" style={{ lineHeight: '2', marginBottom: '2rem' }}>
+            <h2 className="section-title">Governance</h2>
+            {renderDetailRow('Created by', kpi.created_by, 'created-by')}
+            {renderDetailRow('Created on', kpi.created_at ? new Date(kpi.created_at).toLocaleDateString() : null, 'created-on')}
+            {renderDetailRow('Last modified by', kpi.last_modified_by ?? undefined, 'last-modified-by')}
+            {renderDetailRow('Last modified on', kpi.last_modified_at ? new Date(kpi.last_modified_at).toLocaleDateString() : null, 'last-modified-on')}
+            {renderDetailRow('Status', kpi.status ? kpi.status.toUpperCase() : null, 'status')}
+          </section>
 
           {kpi.github_pr_url && (
             <section id="github" style={{ marginBottom: '2rem' }}>

@@ -95,11 +95,17 @@ async function resolveUserRole(supabase: SupabaseClient, user: User) {
 export default async function AuthProvider({ children }: { children: React.ReactNode }) {
 	const supabase = await createClient();
 	const {
+		data: { user },
+	} = await supabase.auth.getUser();
+
+	const initialUser = user ?? null;
+	const initialRole: Role = initialUser ? await resolveUserRole(supabase, initialUser) : 'contributor';
+
+	// We still seed the client with the current session so the browser Supabase client
+	// has tokens available immediately. This does not change how we trust the user identity.
+	const {
 		data: { session },
 	} = await supabase.auth.getSession();
-
-	const initialUser = session?.user ?? null;
-	const initialRole: Role = initialUser ? await resolveUserRole(supabase, initialUser) : 'contributor';
 
 	return (
 		<AuthClientProvider initialSession={session ?? null} initialUser={initialUser} initialRole={initialRole}>
