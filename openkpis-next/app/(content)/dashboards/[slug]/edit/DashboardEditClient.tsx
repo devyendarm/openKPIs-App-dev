@@ -3,12 +3,8 @@
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import { withTablePrefix } from '@/src/types/entities';
 import { useAuth } from '@/app/providers/AuthClientProvider';
 import type { NormalizedDashboard } from '@/lib/server/dashboards';
-
-const dashboardsTable = withTablePrefix('dashboards');
 
 const CATEGORY_OPTIONS = [
   'Conversion',
@@ -56,11 +52,6 @@ export default function DashboardEditClient({ dashboard, slug, canEdit }: Dashbo
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const userName =
-    (user?.user_metadata?.user_name as string | undefined) ||
-    user?.email ||
-    null;
-
   const handleAddTag = () => {
     const trimmed = tagInput.trim();
     if (!trimmed || formData.tags.includes(trimmed)) return;
@@ -73,7 +64,7 @@ export default function DashboardEditClient({ dashboard, slug, canEdit }: Dashbo
   };
 
   async function handleSave() {
-    if (!userName) {
+    if (!user) {
       setError('You need to sign in to save changes.');
       return;
     }
@@ -82,31 +73,15 @@ export default function DashboardEditClient({ dashboard, slug, canEdit }: Dashbo
     setError(null);
 
     try {
-      const updatePayload = {
-        ...formData,
-        status: 'draft',
-        last_modified_by: userName,
-        last_modified_at: new Date().toISOString(),
-      };
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updateError } = await (supabase.from(dashboardsTable) as any)
-        .update(updatePayload)
-        .eq('id', dashboard.id);
-
-      if (updateError) {
-        throw new Error(updateError.message || 'Failed to update dashboard.');
-      }
-
-      const syncResponse = await fetch(`/api/dashboards/${dashboard.id}/sync-github`, {
-        method: 'POST',
+      const response = await fetch(`/api/items/dashboard/${dashboard.id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'edited' }),
+        body: JSON.stringify({ data: formData }),
       });
 
-      if (!syncResponse.ok) {
-        const payload = await syncResponse.json().catch(() => null);
-        throw new Error(payload?.error || 'GitHub sync failed.');
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || 'Failed to update dashboard.');
       }
 
       router.push(`/dashboards/${slug}`);

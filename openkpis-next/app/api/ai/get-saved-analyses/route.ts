@@ -45,7 +45,7 @@ export async function GET() {
     }
 
     // Fetch user's dashboards (use validated user for lookup)
-    const userName = user.user_metadata?.user_name || user.email || '';
+    const userName = user?.user_metadata?.user_name || user?.email || '';
     
     const { data: dashboards, error: dashboardsError } = await supabase
       .from(withTablePrefix('dashboards'))

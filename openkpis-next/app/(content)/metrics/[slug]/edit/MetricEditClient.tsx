@@ -3,8 +3,6 @@
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import { withTablePrefix } from '@/src/types/entities';
 import { useAuth } from '@/app/providers/AuthClientProvider';
 import type { NormalizedMetric } from '@/lib/server/metrics';
 
@@ -15,8 +13,6 @@ type FormData = {
   category: string;
   tags: string[];
 };
-
-const metricsTable = withTablePrefix('metrics');
 
 const CATEGORY_OPTIONS = [
   'Conversion',
@@ -58,11 +54,6 @@ export default function MetricEditClient({ metric, slug, canEdit }: MetricEditCl
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const userName =
-    (user?.user_metadata?.user_name as string | undefined) ||
-    user?.email ||
-    null;
-
   const handleAddTag = () => {
     const trimmed = tagInput.trim();
     if (!trimmed || formData.tags.includes(trimmed)) return;
@@ -75,7 +66,7 @@ export default function MetricEditClient({ metric, slug, canEdit }: MetricEditCl
   };
 
   async function handleSave() {
-    if (!userName) {
+    if (!user) {
       setError('You need to be signed in to save changes.');
       return;
     }
@@ -84,31 +75,15 @@ export default function MetricEditClient({ metric, slug, canEdit }: MetricEditCl
     setError(null);
 
     try {
-      const updatePayload = {
-        ...formData,
-        status: 'draft',
-        last_modified_by: userName,
-        last_modified_at: new Date().toISOString(),
-      };
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updateError } = await (supabase.from(metricsTable) as any)
-        .update(updatePayload)
-        .eq('id', metric.id);
-
-      if (updateError) {
-        throw new Error(updateError.message || 'Failed to update metric.');
-      }
-
-      const syncResponse = await fetch(`/api/metrics/${metric.id}/sync-github`, {
-        method: 'POST',
+      const response = await fetch(`/api/items/metric/${metric.id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'edited' }),
+        body: JSON.stringify({ data: formData }),
       });
 
-      if (!syncResponse.ok) {
-        const payload = await syncResponse.json().catch(() => null);
-        throw new Error(payload?.error || 'GitHub sync failed.');
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || 'Failed to update metric.');
       }
 
       router.push(`/metrics/${slug}`);

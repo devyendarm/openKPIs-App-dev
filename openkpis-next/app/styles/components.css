@@ -73,6 +73,58 @@
 	box-shadow: var(--shadow-sm);
 }
 
+/* Tables */
+.table {
+	width: 100%;
+	border-collapse: collapse;
+}
+.table thead tr {
+	background-color: var(--ifm-color-emphasis-100);
+	border-bottom: 2px solid var(--ifm-color-emphasis-200);
+}
+.table th,
+.table td {
+	padding: 1rem;
+	font-size: 0.95rem;
+	border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+.table th {
+	text-align: left;
+	font-weight: 600;
+}
+.table--striped tbody tr:nth-child(even) {
+	background-color: var(--ifm-color-emphasis-50);
+}
+.text-right { text-align: right; }
+.text-muted { color: var(--ifm-color-emphasis-600); }
+
+/* Rank badge */
+.rank-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	font-weight: 600;
+	font-size: 0.875rem;
+	color: var(--ifm-font-color-base);
+	background-color: var(--ifm-color-emphasis-200);
+}
+.rank-badge--gold { background-color: #FFD700; color: #fff; }
+.rank-badge--silver { background-color: #C0C0C0; color: #fff; }
+.rank-badge--bronze { background-color: #CD7F32; color: #fff; }
+
+/* Leaderboard contributor cell */
+.contrib {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+}
+.contrib-name {
+	font-weight: 500;
+}
+
 /* Messages */
 .msg { padding: 1rem; border-radius: var(--radius-lg); border: 1px solid; }
 .msg-success { border-color: var(--color-success); background-color: var(--color-success-bg); color: #065f46; }
@@ -90,6 +142,62 @@
 	outline: none;
 }
 .input:focus { box-shadow: 0 0 0 2px rgba(79,70,229,0.15); }
+
+/* Textarea */
+.textarea {
+	padding: 0.6rem 0.75rem;
+	border: 1px solid var(--color-border-strong);
+	border-radius: var(--radius-sm);
+	background-color: var(--color-bg);
+	color: var(--color-fg);
+	font-size: 0.9rem;
+	min-height: 120px;
+	outline: none;
+	font-family: inherit;
+}
+.textarea:focus { box-shadow: 0 0 0 2px rgba(79,70,229,0.15); }
+
+/* Tabs */
+.tabs {
+	display: flex;
+	gap: 1rem;
+	border-bottom: 1px solid var(--ifm-color-emphasis-200);
+	margin-bottom: 2rem;
+}
+.tab {
+	padding: 0.75rem 1rem;
+	border: none;
+	background: transparent;
+	border-bottom: 2px solid transparent;
+	color: var(--ifm-font-color-base);
+	font-weight: 400;
+	cursor: pointer;
+}
+.tab--active {
+	border-bottom-color: var(--ifm-color-primary);
+	color: var(--ifm-color-primary);
+	font-weight: 600;
+}
+
+/* Chips */
+.chip {
+	padding: 0.25rem 0.75rem;
+	background-color: var(--ifm-color-primary);
+	color: #fff;
+	border-radius: 4px;
+	font-size: 0.875rem;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+.chip-close {
+	border: none;
+	background: transparent;
+	color: #fff;
+	cursor: pointer;
+	padding: 0;
+	font-size: 1rem;
+}
 
 /* Dropdown panel */
 .dropdown-panel {

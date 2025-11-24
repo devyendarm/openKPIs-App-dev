@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
-import { withTablePrefix } from '@/src/types/entities';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/app/providers/AuthClientProvider';
+import { signInWithGitHub } from '@/lib/supabase/auth';
 
 interface LikeButtonProps {
   itemType: 'kpi' | 'event' | 'dimension' | 'metric' | 'dashboard';
@@ -11,62 +10,53 @@ interface LikeButtonProps {
   itemSlug: string;
 }
 
-const likesTable = withTablePrefix('likes');
-type LikeRow = {
-  id: string;
-  user_id: string | null;
-  item_type: string;
-  item_id: string;
-  item_slug: string;
-  created_at: string;
-  [key: string]: unknown;
+type LikeSummary = {
+  count: number;
+  liked: boolean;
 };
 
 export default function LikeButton({ itemType, itemId, itemSlug }: LikeButtonProps) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
+  const [isMutating, setIsMutating] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    const params = new URLSearchParams({
+      itemType,
+      itemId,
+    });
+
+    const response = await fetch(`/api/likes?${params.toString()}`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to load like status (${response.status})`);
+    }
+
+    const summary = (await response.json()) as LikeSummary;
+    return summary;
+  }, [itemId, itemType]);
 
   useEffect(() => {
+    if (authLoading) return;
+
     let active = true;
     async function loadStatus() {
-      setLoading(true);
       try {
-        const { count } = await supabase
-          .from(likesTable)
-          .select('*', { count: 'exact', head: true })
-          .eq('item_type', itemType)
-          .eq('item_id', itemId);
-
-        if (active && count !== null) {
-          setLikeCount(count);
-        }
-
-        if (user) {
-          const { data, error } = await supabase
-            .from(likesTable)
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('item_type', itemType)
-            .eq('item_id', itemId)
-            .single();
-
-          if (active) {
-            setLiked(!error && Boolean(data));
-          }
-        } else if (active) {
-          setLiked(false);
+        setInitializing(true);
+        const summary = await fetchStatus();
+        if (active) {
+          setLikeCount(summary.count);
+          setLiked(summary.liked);
         }
       } catch (error) {
-        if (active) {
-          console.error('Error loading like status:', error);
-          setLiked(false);
-        }
+        if (active) console.error('Error loading like status:', error);
       } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setInitializing(false);
       }
     }
 
@@ -75,56 +65,76 @@ export default function LikeButton({ itemType, itemId, itemSlug }: LikeButtonPro
     return () => {
       active = false;
     };
-  }, [user, itemId, itemType]);
+  }, [authLoading, fetchStatus, user?.id]);
 
   async function handleToggleLike() {
+    if (authLoading) return;
+    if (isMutating) return;
+
     if (!user) {
-      alert('Please sign in to like items');
+      const { error } = await signInWithGitHub();
+      if (error) {
+        console.error('GitHub sign-in failed for like button:', error);
+        alert(error.message || 'GitHub sign-in failed. Please try again.');
+      }
       return;
     }
 
-    setLoading(true);
-    try {
-      if (liked) {
-        // Unlike
-        const { error } = await supabase
-          .from(likesTable)
-          .delete()
-          .eq('user_id', user.id)
-          .eq('item_type', itemType)
-          .eq('item_id', itemId);
+    const previousLiked = liked;
+    const previousCount = likeCount;
+    const nextLiked = !liked;
 
-        if (error) {
-          console.error('Error unliking item:', error);
-          alert(error.message || 'Failed to remove like. Please try again.');
-        } else {
-          setLiked(false);
-          setLikeCount((prev) => Math.max(0, prev - 1));
-        }
-      } else {
-        // Like
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error } = await (supabase.from(likesTable) as any)
-          .insert({
-            user_id: user.id,
-            item_type: itemType,
-            item_id: itemId,
-            item_slug: itemSlug,
+    setLiked(nextLiked);
+    setLikeCount((prev) => {
+      if (nextLiked) return prev + 1;
+      return Math.max(0, prev - 1);
+    });
+
+    setIsMutating(true);
+    try {
+      const method = previousLiked ? 'DELETE' : 'POST';
+      const body = previousLiked
+        ? JSON.stringify({
+            itemType,
+            itemId,
+          })
+        : JSON.stringify({
+            itemType,
+            itemId,
+            itemSlug,
           });
 
-        if (error) {
-          console.error('Error liking item:', error);
-          alert(error.message || 'Failed to add like. Please try again.');
+      const response = await fetch('/api/likes', {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body,
+      });
+
+      if (!response.ok) {
+        const message = await response
+          .json()
+          .then((json: { error?: string }) => json.error)
+          .catch(() => null);
+        if (message) {
+          alert(message);
         } else {
-          setLiked(true);
-          setLikeCount((prev) => prev + 1);
+          alert(`Failed to ${previousLiked ? 'remove' : 'add'} like. Please try again.`);
         }
+        throw new Error(`Request failed with status ${response.status}`);
       }
+
+      const summary = (await response.json()) as LikeSummary;
+      setLiked(summary.liked);
+      setLikeCount(summary.count);
     } catch (err) {
       console.error('Error toggling like:', err);
       alert('Failed to update like. Please try again.');
+      setLiked(previousLiked);
+      setLikeCount(previousCount);
     } finally {
-      setLoading(false);
+      setIsMutating(false);
     }
   }
 
@@ -140,27 +150,26 @@ export default function LikeButton({ itemType, itemId, itemSlug }: LikeButtonPro
         backgroundColor: liked ? 'var(--ifm-color-primary)' : 'transparent',
         color: liked ? 'white' : 'var(--ifm-color-emphasis-700)',
         borderRadius: '6px',
-        cursor: user ? 'pointer' : 'not-allowed',
+        cursor: 'pointer',
         fontSize: '0.875rem',
         fontWeight: 500,
         transition: 'all 0.2s',
-        opacity: loading ? 0.6 : 1,
+        opacity: isMutating ? 0.6 : 1,
       }}
       onMouseEnter={(e) => {
-        if (user && !loading) {
-          e.currentTarget.style.backgroundColor = liked
-            ? 'var(--ifm-color-primary-dark)'
-            : 'var(--ifm-color-emphasis-100)';
-        }
+        e.currentTarget.style.backgroundColor = liked
+          ? 'var(--ifm-color-primary-dark)'
+          : 'var(--ifm-color-emphasis-100)';
       }}
       onMouseLeave={(e) => {
-        if (user && !loading) {
-          e.currentTarget.style.backgroundColor = liked
-            ? 'var(--ifm-color-primary)'
-            : 'transparent';
-        }
+        e.currentTarget.style.backgroundColor = liked
+          ? 'var(--ifm-color-primary)'
+          : 'transparent';
       }}
       aria-label={liked ? 'Unlike' : 'Like'}
+      aria-pressed={liked}
+      data-initializing={initializing}
+      data-loading={isMutating}
     >
       <svg
         width="16"

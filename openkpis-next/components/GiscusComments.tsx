@@ -1,21 +1,15 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { signInWithGitHub } from '@/lib/supabase/auth';
 import { useAuth } from '@/app/providers/AuthClientProvider';
+import { giscusConfig } from '@/lib/config/giscus';
 
 interface GiscusCommentsProps {
   term?: string;
   category?: string;
 }
-
-type SessionWithAccessToken = Session & { 
-  provider_access_token?: string | null;
-  provider_token?: string | null;
-  provider_refresh_token?: string | null;
-};
 
 type GiscusMessage = {
   giscus?: {
@@ -26,47 +20,23 @@ type GiscusMessage = {
 
 async function extractProviderToken(): Promise<string | null> {
   try {
-    // First, try to get from client-side session
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return null;
-    
-    // Try multiple ways to get the GitHub token from session
-    const extended = session as SessionWithAccessToken;
-    
-    // First, try direct properties
-    if (session.provider_token) {
-      return session.provider_token;
+    const response = await fetch('/api/auth/github-token', {
+      method: 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const token = typeof data.token === 'string' ? data.token : null;
+      return token && token.trim().length > 0 ? token : null;
     }
-    
-    if (extended.provider_access_token) {
-      return extended.provider_access_token;
+
+    if (response.status === 401 || response.status === 404) {
+      return null;
     }
-    
-    // Try to get from user metadata (sometimes stored there)
-    const user = session.user;
-    if (user?.user_metadata?.provider_token) {
-      return user.user_metadata.provider_token as string;
-    }
-    
-    // If not found in client session, try fetching from server API
-    // This is needed because Supabase might not expose provider tokens
-    // directly in the client-side session object
-    try {
-      const response = await fetch('/api/auth/github-token', {
-        method: 'GET',
-        credentials: 'include',
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.token) {
-          return data.token;
-        }
-      }
-    } catch (apiError) {
-      console.warn('Failed to fetch token from API:', apiError);
-    }
-    
+
+    console.warn('Unexpected response fetching GitHub token:', response.status);
     return null;
   } catch (error) {
     console.error('Error extracting provider token:', error);
@@ -80,6 +50,7 @@ export default function GiscusComments({ term, category = 'kpis' }: GiscusCommen
   const [giscusLoaded, setGiscusLoaded] = useState(false);
   const [githubToken, setGithubToken] = useState<string | null>(null);
   const [tokenRetryCount, setTokenRetryCount] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Function to fetch and set the GitHub token
   const fetchGitHubToken = useCallback(async (retry = false) => {
@@ -199,18 +170,18 @@ export default function GiscusComments({ term, category = 'kpis' }: GiscusCommen
 
     const script = document.createElement('script');
     script.src = 'https://giscus.app/client.js';
-    script.setAttribute('data-repo', 'devyendarm/OpenKPIs');
-    script.setAttribute('data-repo-id', 'R_kgDOP1g99A');
-    script.setAttribute('data-category', 'Q&A');
-    script.setAttribute('data-category-id', 'DIC_kwDOP1g99M4CxJez');
-    script.setAttribute('data-mapping', 'pathname');
-    script.setAttribute('data-strict', '1');
-    script.setAttribute('data-reactions-enabled', '1');
-    script.setAttribute('data-emit-metadata', '0');
-    script.setAttribute('data-input-position', 'bottom');
-    script.setAttribute('data-theme', 'light');
-    script.setAttribute('data-lang', 'en');
-    script.setAttribute('data-loading', 'lazy');
+    script.setAttribute('data-repo', giscusConfig.repo);
+    script.setAttribute('data-repo-id', giscusConfig.repoId);
+    script.setAttribute('data-category', giscusConfig.category);
+    script.setAttribute('data-category-id', giscusConfig.categoryId);
+    script.setAttribute('data-mapping', giscusConfig.mapping);
+    script.setAttribute('data-strict', giscusConfig.strict);
+    script.setAttribute('data-reactions-enabled', giscusConfig.reactionsEnabled);
+    script.setAttribute('data-emit-metadata', giscusConfig.emitMetadata);
+    script.setAttribute('data-input-position', giscusConfig.inputPosition);
+    script.setAttribute('data-theme', giscusConfig.theme);
+    script.setAttribute('data-lang', giscusConfig.lang);
+    script.setAttribute('data-loading', giscusConfig.loading);
     script.setAttribute('crossorigin', 'anonymous');
     
     // Set GitHub token if available (before loading Giscus)
@@ -223,6 +194,7 @@ export default function GiscusComments({ term, category = 'kpis' }: GiscusCommen
     // Set up onload handler
     script.onload = () => {
       setGiscusLoaded(true);
+      setLoadError(null);
       
       // If we have a token, send it to Giscus after it loads
       if (githubToken) {
@@ -230,6 +202,20 @@ export default function GiscusComments({ term, category = 'kpis' }: GiscusCommen
           updateGiscusAuth(githubToken);
         }, 1000);
       }
+    };
+
+    // Set up onerror handler to capture network/CSP/ad-block issues
+    script.onerror = () => {
+      const cfg = {
+        repo: giscusConfig.repo,
+        repoId: giscusConfig.repoId,
+        category: giscusConfig.category,
+        categoryId: giscusConfig.categoryId,
+        mapping: giscusConfig.mapping,
+        strict: giscusConfig.strict,
+      };
+      console.error('Failed to load Giscus client.js. Check CSP/ad-block and config:', cfg);
+      setLoadError('Comments failed to load. Please check network/CSP/ad-block settings.');
     };
 
     container?.appendChild(script);
@@ -288,6 +274,23 @@ export default function GiscusComments({ term, category = 'kpis' }: GiscusCommen
     }
   }, [githubToken, giscusLoaded, user, authLoading, updateGiscusAuth, fetchGitHubToken]);
 
-  return <div ref={containerRef} style={{ marginTop: '3rem' }} />;
+  return (
+    <div style={{ marginTop: '3rem' }}>
+      {loadError && (
+        <div style={{ marginBottom: '0.75rem', color: 'var(--ifm-color-danger-contrast-foreground)' }}>
+          {loadError}{' '}
+          <a
+            href={`https://github.com/${giscusConfig.repo}/discussions`}
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: 'var(--ifm-color-primary)' }}
+          >
+            View discussions on GitHub
+          </a>
+        </div>
+      )}
+      <div ref={containerRef} />
+    </div>
+  );
 }
 

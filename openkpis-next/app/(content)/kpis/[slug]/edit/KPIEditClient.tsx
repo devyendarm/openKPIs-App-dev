@@ -3,20 +3,14 @@
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import { withTablePrefix } from '@/src/types/entities';
 import { useAuth } from '@/app/providers/AuthClientProvider';
 import type { NormalizedKpi } from '@/lib/server/kpis';
-
-const kpisTable = withTablePrefix('kpis');
 
 const CATEGORIES = ['Conversion', 'Revenue', 'Engagement', 'Retention', 'Acquisition', 'Performance', 'Quality', 'Efficiency', 'Satisfaction', 'Growth', 'Other'];
 const INDUSTRIES = ['Retail', 'E-commerce', 'SaaS', 'Healthcare', 'Education', 'Finance', 'Media', 'Technology', 'Manufacturing', 'Other'];
 const PRIORITIES = ['High', 'Medium', 'Low'];
 const KPI_TYPES = ['Counter', 'Rate', 'Ratio', 'Percentage', 'Average', 'Sum'];
 const SCOPES = ['User', 'Session', 'Event', 'Global'];
-
-export type KpiStatus = 'draft' | 'published' | 'archived';
 
 type FormData = {
   name: string;
@@ -57,44 +51,6 @@ type AdditionalKpiFields = {
 };
 
 export type EditableKpi = NormalizedKpi & AdditionalKpiFields;
-
-type KpiUpdatePayload = {
-  // Core fields
-  name: string;
-  description: string;
-  formula: string;
-  category: string;
-  tags: string[];
-
-  // Business context
-  industry: string[];
-  priority: string;
-  core_area: string;
-  scope: string;
-
-  // Technical
-  kpi_type: string;
-  aggregation_window: string;
-
-  // Platform implementation
-  ga4_implementation: string;
-  adobe_implementation: string;
-  amplitude_implementation: string;
-
-  // Data mappings
-  data_layer_mapping: string;
-  xdm_mapping: string;
-
-  // SQL & documentation
-  sql_query: string;
-  calculation_notes: string;
-  details: string;
-
-  // Governance / audit
-  status: KpiStatus;
-  last_modified_by: string;
-  last_modified_at: string;
-};
 
 type KPIEditClientProps = {
   kpi: EditableKpi;
@@ -145,11 +101,6 @@ export default function KPIEditClient({ kpi, slug, canEdit }: KPIEditClientProps
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const userName =
-    (user?.user_metadata?.user_name as string | undefined) ||
-    user?.email ||
-    null;
-
   const handleAddTag = () => {
     const trimmed = tagInput.trim();
     if (!trimmed || formData.tags.includes(trimmed)) return;
@@ -173,7 +124,7 @@ export default function KPIEditClient({ kpi, slug, canEdit }: KPIEditClientProps
   };
 
   async function handleSave() {
-    if (!userName) {
+    if (!user) {
       setError('You need to sign in to save changes.');
       return;
     }
@@ -182,67 +133,15 @@ export default function KPIEditClient({ kpi, slug, canEdit }: KPIEditClientProps
     setError(null);
 
     try {
-      const { industry: industryString } = formData;
-
-      // Build a payload that matches the actual Supabase KPI columns.
-      // We intentionally do NOT send fields that are not yet in the schema
-      // (e.g. dependencies, measure, etc.) to avoid update failures.
-      const updatePayload: KpiUpdatePayload = {
-        // Core
-        name: formData.name,
-        description: formData.description,
-        formula: formData.formula,
-        category: formData.category,
-        tags: formData.tags,
-
-        // Business context
-        industry: industryString ? [industryString] : [],
-        priority: formData.priority,
-        core_area: formData.core_area,
-        scope: formData.scope,
-
-        // Technical
-        kpi_type: formData.kpi_type,
-        aggregation_window: formData.aggregation_window,
-
-        // Platform implementation
-        ga4_implementation: formData.ga4_implementation,
-        adobe_implementation: formData.adobe_implementation,
-        amplitude_implementation: formData.amplitude_implementation,
-
-        // Data mappings
-        data_layer_mapping: formData.data_layer_mapping,
-        xdm_mapping: formData.xdm_mapping,
-
-        // SQL & docs
-        sql_query: formData.sql_query,
-        calculation_notes: formData.calculation_notes,
-        details: formData.details,
-
-        // Governance
-        status: 'draft' as KpiStatus,
-        last_modified_by: userName,
-        last_modified_at: new Date().toISOString(),
-      };
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updateError } = await (supabase.from(kpisTable) as any)
-        .update(updatePayload)
-        .eq('id', kpi.id);
-
-      if (updateError) {
-        throw new Error(updateError.message || 'Failed to update KPI.');
-      }
-
-      const syncResponse = await fetch(`/api/kpis/${kpi.id}/sync-github`, {
-        method: 'POST',
+      const response = await fetch(`/api/items/kpi/${kpi.id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'edited' }),
+        body: JSON.stringify({ data: formData }),
       });
 
-      if (!syncResponse.ok) {
-        const payload = await syncResponse.json().catch(() => null);
-        throw new Error(payload?.error || 'GitHub sync failed.');
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || 'Failed to save KPI.');
       }
 
       router.push(`/kpis/${slug}`);

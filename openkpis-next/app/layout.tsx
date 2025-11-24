@@ -8,7 +8,6 @@ import "./styles/tokens.css";
 import "./styles/components.css";
 import "./styles/layout.css";
 import AuthProvider from "./providers/AuthProvider";
-import VersionLogger from "@/components/VersionLogger";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -76,7 +75,6 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
           {children}
           <Footer />
         </AuthProvider>
-        <VersionLogger />
       </body>
     </html>
   );

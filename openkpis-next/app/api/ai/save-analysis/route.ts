@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     const currentUser: User | null = user ?? null;
     const userId: string | null = currentUser?.id ?? null;
-
+    
     if (!userId || !currentUser) {
       console.error('[Save Analysis] Auth error (getUser):', userError);
       return NextResponse.json(
