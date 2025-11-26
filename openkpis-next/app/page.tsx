@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { config } from '@/lib/config';
 
 interface GitHubStats {
   stars: number;
@@ -36,7 +37,7 @@ export default function Home() {
     
     const fetchGitHubStats = async () => {
       try {
-        const response = await fetch('https://api.github.com/repos/devyendarm/OpenKPIs');
+        const response = await fetch(`https://api.github.com/repos/${config.github.appRepoFull}`);
         if (response.ok) {
           const data = await response.json();
           setGithubStats({
@@ -317,7 +318,7 @@ export default function Home() {
           {/* GitHub Buttons */}
           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'center' }}>
             <a
-              href="https://github.com/devyendarm/OpenKPIs"
+              href={config.github.appRepoUrl}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -350,7 +351,7 @@ export default function Home() {
               </span>
             </a>
             <a
-              href="https://github.com/devyendarm/OpenKPIs/fork"
+              href={`${config.github.appRepoUrl}/fork`}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -601,7 +602,7 @@ export default function Home() {
           </p>
           <div style={{ display: 'flex', gap: 'clamp(0.5rem, 2vw, 1rem)', justifyContent: 'center', flexWrap: 'wrap' }}>
             <a
-              href="https://github.com/devyendarm/OpenKPIs"
+              href={config.github.appRepoUrl}
               target="_blank"
               rel="noopener noreferrer"
               style={{

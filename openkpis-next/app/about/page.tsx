@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { config } from '@/lib/config';
 
 export default function AboutPage() {
   return (
@@ -40,7 +41,7 @@ export default function AboutPage() {
         </p>
         <p>
           <a
-            href="https://github.com/devyendarm/OpenKPIs"
+            href={config.github.appRepoUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="btn btn-primary"

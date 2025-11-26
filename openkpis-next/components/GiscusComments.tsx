@@ -19,18 +19,18 @@ type GiscusMessage = {
 };
 
 async function extractProviderToken(): Promise<string | null> {
-  try {
-    const response = await fetch('/api/auth/github-token', {
-      method: 'GET',
-      credentials: 'include',
+    try {
+      const response = await fetch('/api/auth/github-token', {
+        method: 'GET',
+        credentials: 'include',
       cache: 'no-store',
-    });
-
-    if (response.ok) {
-      const data = await response.json();
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
       const token = typeof data.token === 'string' ? data.token : null;
       return token && token.trim().length > 0 ? token : null;
-    }
+        }
 
     if (response.status === 401 || response.status === 404) {
       return null;
