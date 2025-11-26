@@ -5,10 +5,30 @@ import { createServerClient } from '@supabase/ssr';
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
+  const error = url.searchParams.get('error');
+  const errorDescription = url.searchParams.get('error_description');
 
   const requestCookies = await nextCookies();
 
+  // Handle OAuth errors from Supabase/GitHub
+  if (error) {
+    console.error('[auth/callback] OAuth error:', {
+      error,
+      errorDescription,
+      url: url.toString(),
+    });
+    
+    // Redirect to home with error message
+    const redirectUrl = new URL('/', url.origin);
+    redirectUrl.searchParams.set('auth_error', error);
+    if (errorDescription) {
+      redirectUrl.searchParams.set('error_message', errorDescription);
+    }
+    return NextResponse.redirect(redirectUrl, { status: 302 });
+  }
+
   if (!code) {
+    console.warn('[auth/callback] No code parameter in callback URL');
     return NextResponse.redirect(new URL('/', url.origin));
   }
 
@@ -20,15 +40,15 @@ export async function GET(request: Request) {
   const response = NextResponse.redirect(redirectUrl, { status: 302 });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  const supabasePublishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
 
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (!supabaseUrl || !supabasePublishableKey) {
     console.error('[auth/callback] Missing Supabase env vars');
     return response;
   }
 
   // Use a server client that writes auth cookies directly onto this response
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+  const supabase = createServerClient(supabaseUrl, supabasePublishableKey, {
     cookies: {
       get(name: string) {
         return requestCookies.get(name)?.value;
@@ -43,10 +63,20 @@ export async function GET(request: Request) {
   });
 
   // Exchange the auth code for a session and set cookies on the response
-  const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code);
-  if (error) {
-    console.error('[auth/callback] exchangeCodeForSession error:', error);
-    return NextResponse.redirect(new URL('/', url.origin));
+  const { data: sessionData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+  if (exchangeError) {
+    console.error('[auth/callback] exchangeCodeForSession error:', {
+      error: exchangeError,
+      message: exchangeError.message,
+      status: exchangeError.status,
+      code: code.substring(0, 20) + '...', // Log partial code for debugging
+    });
+    
+    // Redirect to home with specific error message
+    const redirectUrl = new URL('/', url.origin);
+    redirectUrl.searchParams.set('auth_error', 'exchange_failed');
+    redirectUrl.searchParams.set('error_message', exchangeError.message || 'Failed to complete sign-in. Please try again.');
+    return NextResponse.redirect(redirectUrl, { status: 302 });
   }
 
   // Clear the temporary return URL cookie (on the response so it propagates)

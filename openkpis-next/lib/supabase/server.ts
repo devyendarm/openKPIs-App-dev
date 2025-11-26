@@ -6,22 +6,22 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-function getSupabaseServerConfig(useAnonKey: boolean = true) {
+function getSupabaseServerConfig(usePublishableKey: boolean = true) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 
-  if (useAnonKey) {
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-    if (!url || !anonKey) {
-      throw new Error('[Supabase] Missing server auth envs: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  if (usePublishableKey) {
+    const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
+    if (!url || !publishableKey) {
+      throw new Error('[Supabase] Missing server auth envs: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY');
     }
-    return { url, key: anonKey };
+    return { url, key: publishableKey };
   }
 
-  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-  if (!url || !serviceRole) {
-    throw new Error('[Supabase] Missing server admin envs: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+  const secretKey = process.env.SUPABASE_SECRET_KEY || '';
+  if (!url || !secretKey) {
+    throw new Error('[Supabase] Missing server admin envs: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY');
   }
-  return { url, key: serviceRole };
+  return { url, key: secretKey };
 }
 
 /**
