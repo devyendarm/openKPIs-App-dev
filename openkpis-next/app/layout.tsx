@@ -44,7 +44,7 @@ export default function RootLayout({
         {/* Preconnect to Supabase */}
         {process.env.NEXT_PUBLIC_SUPABASE_URL ? (
           <>
-            <link rel="preconnect" href="${process.env.NEXT_PUBLIC_SUPABASE_URL}" crossOrigin="" />
+            <link rel="preconnect" href={process.env.NEXT_PUBLIC_SUPABASE_URL} crossOrigin="" />
           </>
         ) : null}
         {/* Google Tag Manager (toggleable) */}

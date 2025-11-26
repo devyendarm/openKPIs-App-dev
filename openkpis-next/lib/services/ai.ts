@@ -48,29 +48,17 @@ function getOpenAIKey(): string {
   // Clean the key - remove any whitespace, newlines, quotes
   const cleanKey = apiKey.trim().replace(/\r?\n/g, '').replace(/\s+/g, '').replace(/^["']|["']$/g, '').trim();
 
-  // Validate format - must start with sk-proj-
-  if (!cleanKey.startsWith('sk-proj-')) {
+  // Validate format - must start with sk-proj- or sk- (for backward compatibility)
+  if (!cleanKey.startsWith('sk-proj-') && !cleanKey.startsWith('sk-')) {
     // Log key info for debugging (without exposing full key)
     const keyPreview = cleanKey.substring(0, 30) + '...' + cleanKey.substring(cleanKey.length - 10);
     console.error('[AI Service] Invalid OpenAI API key format:', {
       prefix: cleanKey.substring(0, 15),
       suffix: '...' + cleanKey.substring(cleanKey.length - 10),
       length: cleanKey.length,
-      startsWithSkProj: cleanKey.startsWith('sk-proj-'),
+      startsWithSk: cleanKey.startsWith('sk-'),
     });
-    throw new Error(`Invalid OpenAI API key format. Must start with "sk-proj-". Got: ${keyPreview}`);
-  }
-
-  // Validate it's the correct key (not the old cached one ending in a5UA)
-  if (cleanKey.endsWith('sa5UA') || cleanKey.includes('yKSYHv5k4AkQzVylinLZ8yvC_PQlDFmL0')) {
-    console.error('[AI Service] ⚠️  DETECTED OLD/CACHED API KEY!');
-    console.error('[AI Service] This indicates a caching issue. Key ends with:', cleanKey.substring(cleanKey.length - 10));
-    throw new Error('Detected old/cached OpenAI API key. Please restart the Next.js dev server to clear cache.');
-  }
-
-  // Verify it's the correct key (should end with KJIA)
-  if (!cleanKey.includes('spXzvD9m19lkfWkzFS6q8CvtCNPg7LSAZ')) {
-    console.warn('[AI Service] ⚠️  API key may not be from .Credentials.txt. Expected pattern not found.');
+    throw new Error(`Invalid OpenAI API key format. Must start with "sk-proj-" or "sk-". Got: ${keyPreview}`);
   }
 
   // Log success (in development only, with partial key)
@@ -91,7 +79,7 @@ function getOpenAIKey(): string {
  */
 async function callOpenAI(prompt: string, systemPrompt: string = 'Return ONLY valid JSON, no markdown, no explanations.'): Promise<string> {
   const apiKey = getOpenAIKey();
-  const model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
+  const model = process.env.OPENAI_MODEL || 'gpt-5-mini';
   
   // Determine which parameter to use based on model
   // Newer models (gpt-4o, gpt-4-turbo, o1, o3, etc.) use max_completion_tokens
@@ -179,12 +167,12 @@ async function callOpenAI(prompt: string, systemPrompt: string = 'Return ONLY va
       const error = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
       const errorMessage = error.error?.message || 'Unknown error';
       
-      // Enhanced error logging
+      // Enhanced error logging (without exposing API key)
       console.error('[AI Service] OpenAI API error:', {
         status: response.status,
         statusText: response.statusText,
         error: errorMessage,
-        keyUsed: apiKey.substring(0, 15) + '...' + apiKey.substring(apiKey.length - 10),
+        // Key info removed for security - never log API keys, even partially
       });
       
       throw new Error(`OpenAI API error: ${response.status} - ${errorMessage}`);

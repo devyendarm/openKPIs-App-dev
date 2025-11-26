@@ -23,7 +23,7 @@ async function callOpenAIDirect(prompt: string, systemPrompt: string = 'Return O
     throw new Error('OPENAI_API_KEY is not configured');
   }
   
-  const model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
+  const model = process.env.OPENAI_MODEL || 'gpt-5-mini';
   // Determine which parameter to use based on model
   // Newer models (gpt-4o, gpt-4-turbo, o1, o3, etc.) use max_completion_tokens
   // Older models (gpt-3.5-turbo, gpt-4 without turbo/o) use max_tokens
