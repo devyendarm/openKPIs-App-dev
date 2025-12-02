@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { currentAppEnv } from '@/src/types/entities';
+import { withTablePrefix } from '@/src/types/entities';
 
 export type UserRole = 'admin' | 'editor' | 'contributor';
 
@@ -10,16 +10,34 @@ export async function getUserRoleServer(): Promise<UserRole> {
 		error: authError,
 	} = await supabase.auth.getUser();
 
-	if (authError || !user) return 'contributor';
+	if (authError || !user) {
+		console.error('[getUserRoleServer] Auth error or no user:', authError?.message);
+		return 'contributor';
+	}
 
-	const appEnv = currentAppEnv();
-
-	const { data: profile } = await supabase
-		.from('user_profiles')
+	const tableName = withTablePrefix('user_profiles');
+	const { data: profile, error: profileError } = await supabase
+		.from(tableName)
 		.select('user_role, role, is_admin, is_editor')
 		.eq('id', user.id)
-		.eq('app_env', appEnv)
 		.maybeSingle();
+
+	if (profileError) {
+		console.error('[getUserRoleServer] Profile query error:', {
+			userId: user.id,
+			tableName,
+			error: profileError.message,
+			code: profileError.code,
+			hint: profileError.hint,
+		});
+	}
+
+	if (!profile) {
+		console.warn('[getUserRoleServer] No profile found:', {
+			userId: user.id,
+			tableName,
+		});
+	}
 
 	let role =
 		(profile?.user_role ||
@@ -35,9 +53,20 @@ export async function getUserRoleServer(): Promise<UserRole> {
 		}
 	}
 
-	if (role === 'admin') return 'admin';
-	if (role === 'editor') return 'editor';
-	return 'contributor';
+	const finalRole = role === 'admin' ? 'admin' : role === 'editor' ? 'editor' : 'contributor';
+	
+	console.log('[getUserRoleServer] Role resolution:', {
+		userId: user.id,
+		profileExists: !!profile,
+		profileUserRole: profile?.user_role,
+		profileRole: profile?.role,
+		profileIsAdmin: profile?.is_admin,
+		profileIsEditor: profile?.is_editor,
+		metadataRole: user.user_metadata?.user_role,
+		resolvedRole: finalRole,
+	});
+
+	return finalRole;
 }
 
 
