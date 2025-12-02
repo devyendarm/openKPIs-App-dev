@@ -2,14 +2,14 @@ import React from 'react';
 import { redirect } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
-import { currentAppEnv, withTablePrefix } from '@/src/types/entities';
+import { withTablePrefix } from '@/src/types/entities';
 import type { AnyEntity, EntityKind } from '@/src/types/entities';
 import MyProfileClient from './MyProfileClient';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const profileTable = 'user_profiles';
+const profileTable = withTablePrefix('user_profiles');
 const likesTable = withTablePrefix('likes');
 const contributionsTable = withTablePrefix('contributions');
 const entityTableMap: Record<EntityKind, string> = {
@@ -57,14 +57,12 @@ export default async function MyProfilePage() {
   }
 
   const typedUser = user as User;
-  const appEnv = currentAppEnv();
 
   // Load profile stats
   const { data: profile } = await supabase
     .from(profileTable)
     .select('total_kpis, total_events, total_dimensions, total_metrics, total_likes')
     .eq('id', typedUser.id)
-    .eq('app_env', appEnv)
     .maybeSingle();
 
   const profileSummary = (profile ?? null) as ProfileSummaryRow | null;

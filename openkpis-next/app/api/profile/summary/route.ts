@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { ok, unauthorized, error } from '@/lib/api/response';
-import { currentAppEnv, withTablePrefix } from '@/src/types/entities';
+import { withTablePrefix } from '@/src/types/entities';
 
 export async function GET() {
   try {
@@ -15,7 +15,6 @@ export async function GET() {
     }
 
     const userId = user.id;
-    const appEnv = currentAppEnv();
 
     const likesTable = withTablePrefix('likes');
     const contributionsTable = withTablePrefix('contributions');
@@ -30,10 +29,9 @@ export async function GET() {
       { data: analyses },
     ] = await Promise.all([
       supabase
-        .from('user_profiles')
+        .from(withTablePrefix('user_profiles'))
         .select('*')
         .eq('id', userId)
-        .eq('app_env', appEnv)
         .maybeSingle(),
       supabase
         .from(likesTable)

@@ -1,13 +1,12 @@
 import type { PostgrestError } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { ok, error, unauthorized } from '@/lib/api/response';
-import { currentAppEnv } from '@/src/types/entities';
+import { withTablePrefix } from '@/src/types/entities';
 import { retry, isRetryableError } from '@/lib/utils/retry';
 
 type UserProfileRow = {
   id: string;
   user_role: string;
-  app_env: 'dev' | 'prod';
 };
 
 export async function POST() {
@@ -21,8 +20,6 @@ export async function POST() {
     if (authError || !user) {
       return unauthorized();
     }
-
-    const appEnv = currentAppEnv();
 
     const githubUsername =
       (user.user_metadata?.user_name as string | undefined) ||
@@ -38,10 +35,9 @@ export async function POST() {
       existing = await retry(
         async () => {
           const { data: profile, error: selectError } = await supabase
-            .from('user_profiles')
-            .select('id, user_role, app_env')
+            .from(withTablePrefix('user_profiles'))
+            .select('id, user_role')
             .eq('id', user.id)
-            .eq('app_env', appEnv)
             .maybeSingle();
 
           // PGRST116 is "no rows returned" - not an error
@@ -74,10 +70,9 @@ export async function POST() {
         await retry(
           async () => {
             const { error: insertError } = await supabase
-              .from('user_profiles')
+              .from(withTablePrefix('user_profiles'))
               .insert({
                 id: user.id,
-                app_env: appEnv,
                 user_role: defaultRole,
                 github_username: githubUsername,
                 full_name: fullName,
@@ -123,9 +118,8 @@ export async function POST() {
       await retry(
         async () => {
           const { error: updateError } = await supabase
-            .from('user_profiles')
+            .from(withTablePrefix('user_profiles'))
             .update({
-              app_env: appEnv,
               github_username: githubUsername,
               full_name: fullName,
               email: email,

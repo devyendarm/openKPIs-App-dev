@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { withTablePrefix, currentAppEnv } from '@/src/types/entities';
+import { withTablePrefix } from '@/src/types/entities';
 
 export type LeaderboardRow = {
 	userId: string; // canonical handle we display (prefers github username)
@@ -74,19 +74,16 @@ export async function computeLeaderboard(client: SupabaseClient): Promise<Leader
 	const handles = Object.keys(counts);
 	if (handles.length === 0) return [];
 
-	// Fetch display info from user_profiles for this app env by github_username and by email
-	const appEnv = currentAppEnv();
+	// Fetch display info from user_profiles by github_username and by email
 	const { data: profilesByGithub, error: errorGithub } = await client
-		.from('user_profiles')
-		.select('id, full_name, github_username, email, avatar_url, app_env')
-		.in('github_username', handles)
-		.eq('app_env', appEnv);
+		.from(withTablePrefix('user_profiles'))
+		.select('id, full_name, github_username, email, avatar_url')
+		.in('github_username', handles);
 
 	const { data: profilesByEmail, error: errorEmail } = await client
-		.from('user_profiles')
-		.select('id, full_name, github_username, email, avatar_url, app_env')
-		.in('email', handles)
-		.eq('app_env', appEnv);
+		.from(withTablePrefix('user_profiles'))
+		.select('id, full_name, github_username, email, avatar_url')
+		.in('email', handles);
 
 	if (errorGithub && (errorGithub as unknown as { message?: string }).message) {
 		// eslint-disable-next-line no-console
