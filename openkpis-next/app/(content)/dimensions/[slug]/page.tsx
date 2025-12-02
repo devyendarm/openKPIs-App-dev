@@ -20,8 +20,8 @@ export default async function DimensionDetailPage({ params }: { params: Promise<
     data: { user },
   } = await supabase.auth.getUser();
 
-  const admin = createAdminClient();
-  const dimension = await fetchDimensionBySlug(admin, slug);
+  // Use regular client (not admin) - RLS policies handle access control
+  const dimension = await fetchDimensionBySlug(supabase, slug);
 
   if (!dimension) {
     return (

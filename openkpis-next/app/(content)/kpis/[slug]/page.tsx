@@ -176,8 +176,8 @@ export default async function KPIDetailPage({ params }: { params: Promise<{ slug
     data: { user },
   } = await supabase.auth.getUser();
 
-  const admin = createAdminClient();
-  const kpi = await fetchKpiBySlug(admin, slug);
+  // Use regular client (not admin) - RLS policies handle access control
+  const kpi = await fetchKpiBySlug(supabase, slug);
 
   if (!kpi) {
     return (

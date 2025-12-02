@@ -18,8 +18,8 @@ export default async function MetricDetailPage({ params }: { params: Promise<{ s
     data: { user },
   } = await supabase.auth.getUser();
 
-  const admin = createAdminClient();
-  const metric = await fetchMetricBySlug(admin, slug);
+  // Use regular client (not admin) - RLS policies handle access control
+  const metric = await fetchMetricBySlug(supabase, slug);
 
   if (!metric) {
     return (

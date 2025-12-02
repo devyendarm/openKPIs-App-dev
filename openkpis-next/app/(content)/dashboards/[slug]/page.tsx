@@ -16,8 +16,8 @@ export default async function DashboardDetailPage({ params }: { params: Promise<
     data: { user },
   } = await supabase.auth.getUser();
 
-  const admin = createAdminClient();
-  const dashboard = await fetchDashboardBySlug(admin, slug);
+  // Use regular client (not admin) - RLS policies handle access control
+  const dashboard = await fetchDashboardBySlug(supabase, slug);
 
   if (!dashboard) {
     return (

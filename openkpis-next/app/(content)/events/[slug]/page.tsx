@@ -56,8 +56,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
     data: { user },
   } = await supabase.auth.getUser();
 
-  const admin = createAdminClient();
-  const { data: rawEvent, error } = await admin
+  // Use regular client (not admin) - RLS policies handle access control
+  const { data: rawEvent, error } = await supabase
     .from(eventsTable)
     .select('*')
     .eq('slug', slug)
