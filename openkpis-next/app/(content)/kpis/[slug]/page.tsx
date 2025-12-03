@@ -178,7 +178,7 @@ export default async function KPIDetailPage({ params }: { params: Promise<{ slug
   
   try {
     supabase = await createClient();
-  } catch (error) {
+  } catch {
     return (
       <main style={{ padding: '2rem', textAlign: 'center' }}>
         <h1>Configuration Error</h1>
@@ -200,7 +200,7 @@ export default async function KPIDetailPage({ params }: { params: Promise<{ slug
 
     // Use regular client (not admin) - RLS policies handle access control
     kpi = await fetchKpiBySlug(supabase, slug);
-  } catch (error) {
+  } catch {
     return (
       <main style={{ padding: '2rem', textAlign: 'center' }}>
         <h1>Error Loading KPI</h1>
