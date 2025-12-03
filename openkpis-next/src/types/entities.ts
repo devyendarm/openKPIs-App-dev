@@ -53,7 +53,7 @@ export function resolveTablePrefix(): string {
 }
 
 /**
- * Logical application environment label used for shared tables like user_profiles.
+ * Logical application environment label used for table prefix resolution.
  * We normalize everything to 'dev' or 'prod' so code can do simple equality checks.
  */
 export function currentAppEnv(): 'dev' | 'prod' {
@@ -68,13 +68,10 @@ export function sqlTableFor(kind: EntityKind): string {
 
 /**
  * Get table name with environment prefix.
- * Special case: user_profiles always uses prod_user_profiles (shared across environments).
+ * Dev environment uses dev_ prefix, prod uses prod_ prefix.
+ * Each environment has its own Supabase project with separate tables.
  */
 export function withTablePrefix(table: string): string {
-  // user_profiles is always prod_user_profiles (shared across dev/prod)
-  if (table === 'user_profiles') {
-    return 'prod_user_profiles';
-  }
   return `${resolveTablePrefix()}${table}`;
 }
 
