@@ -30,6 +30,7 @@ export interface KPI {
   
   // Data Mappings
   data_layer_mapping?: string; // JSON
+  adobe_client_data_layer?: string; // JSON
   xdm_mapping?: string; // JSON
   
   // SQL

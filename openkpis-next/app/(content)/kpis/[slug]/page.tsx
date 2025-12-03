@@ -11,6 +11,8 @@ import { collectUserIdentifiers } from '@/lib/server/entities';
 import { fetchKpiBySlug, type NormalizedKpi } from '@/lib/server/kpis';
 import { GroupedFields } from '@/components/detail/GroupedFields';
 import type { GroupConfig } from '@/src/types/fields';
+import DataMappingsAccordion from '@/components/detail/DataMappingsAccordion';
+import DataTable from '@/components/detail/DataTable';
 
 type Heading = {
   id: string;
@@ -155,11 +157,12 @@ function buildHeadings(kpi: NormalizedKpi): Heading[] {
 
   if (kpi.formula) headings.push({ id: 'formula', text: 'Formula', level: 2 });
   if (kpi.details) headings.push({ id: 'details', text: 'Details', level: 2 });
-  if (kpi.ga4_implementation) headings.push({ id: 'ga4-implementation', text: 'GA4 Implementation', level: 2 });
-  if (kpi.adobe_implementation) headings.push({ id: 'adobe-implementation', text: 'Adobe Implementation', level: 2 });
-  if (kpi.amplitude_implementation) headings.push({ id: 'amplitude-implementation', text: 'Amplitude Implementation', level: 2 });
-  if (kpi.data_layer_mapping) headings.push({ id: 'data-layer-mapping', text: 'Data Layer Mapping', level: 2 });
-  if (kpi.xdm_mapping) headings.push({ id: 'xdm-mapping', text: 'XDM Mapping', level: 2 });
+  if (kpi.ga4_implementation || kpi.adobe_implementation) {
+    headings.push({ id: 'events', text: 'Events', level: 2 });
+  }
+  if (kpi.data_layer_mapping || (kpi as any).adobe_client_data_layer || kpi.xdm_mapping) {
+    headings.push({ id: 'data-mappings', text: 'Data Mappings', level: 2 });
+  }
   if (kpi.sql_query) headings.push({ id: 'sql-query', text: 'SQL Query', level: 2 });
   if (kpi.calculation_notes) headings.push({ id: 'calculation-notes', text: 'Calculation Notes', level: 2 });
 
@@ -292,14 +295,40 @@ export default async function KPIDetailPage({ params }: { params: Promise<{ slug
           {renderCodeBlock('formula', 'Formula', kpi.formula, 'text')}
           {renderCodeBlock('sql-query', 'SQL Query', normalizeSqlQuery(kpi.sql_query), 'sql')}
           {renderRichTextBlock('calculation-notes', 'Calculation Notes', kpi.calculation_notes)}
-          <section id="overview" className="section" style={{ lineHeight: '2', marginBottom: '2rem' }}>
-            <h2 className="section-title">Events</h2>
-            {renderTokenPills('Google Analytics 4', kpi.ga4_implementation ? [kpi.ga4_implementation] : [])}
-            {renderTokenPills('Adobe', kpi.adobe_implementation ? [kpi.adobe_implementation] : [])}
-            {renderTokenPills('Amplitude', kpi.amplitude_implementation ? [kpi.amplitude_implementation] : [])}
+          <section id="events" style={{ marginBottom: '2rem' }}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1rem' }}>Events</h2>
+            <DataTable
+              data={[
+                {
+                  platform: 'Google Analytics 4',
+                  eventName: kpi.ga4_implementation || '—',
+                },
+                {
+                  platform: 'Adobe',
+                  eventName: kpi.adobe_implementation || '—',
+                },
+              ]}
+              columns={[
+                {
+                  key: 'platform',
+                  header: 'Platform',
+                  align: 'left',
+                },
+                {
+                  key: 'eventName',
+                  header: 'Event Name',
+                  align: 'left',
+                },
+              ]}
+              striped={true}
+              showEmptyState={false}
+            />
           </section>
-          {renderCodeBlock('data-layer-mapping', 'Data Layer Mapping', normalizeJsonMapping(kpi.data_layer_mapping), 'json')}
-          {renderCodeBlock('xdm-mapping', 'XDM Mapping', normalizeJsonMapping(kpi.xdm_mapping), 'json')}
+          <DataMappingsAccordion
+            dataLayerMapping={kpi.data_layer_mapping}
+            adobeClientDataLayer={(kpi as any).adobe_client_data_layer}
+            xdmMapping={kpi.xdm_mapping}
+          />
           <section id="overview" className="section" style={{ lineHeight: '2', marginBottom: '2rem' }}>
             <h2 className="section-title">Governance</h2>
             {renderDetailRow('Created by', kpi.created_by, 'created-by')}

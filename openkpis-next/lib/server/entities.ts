@@ -2,7 +2,7 @@ import type { User } from '@supabase/supabase-js';
 
 import { createAdminClient } from '@/lib/supabase/server';
 import type { AnyEntity, EntityKind } from '@/src/types/entities';
-import { sqlTableFor, tableFor } from '@/src/types/entities';
+import { sqlTableFor } from '@/src/types/entities';
 
 export interface ListEntitiesServerOptions {
   kind: EntityKind;
@@ -49,34 +49,18 @@ async function runQuery(
     .order('created_at', { ascending: false });
 
   const { data, error } = await query;
-  if (error) throw new Error(error.message || 'Failed to list entities');
+  if (error) {
+    throw new Error(error.message || 'Failed to list entities');
+  }
   return (data || []) as AnyEntity[];
 }
 
 export async function listEntitiesForServer(
   options: ListEntitiesServerOptions,
 ): Promise<AnyEntity[]> {
-  const preferredTable = sqlTableFor(options.kind);
-  const fallbackTable = tableFor(options.kind);
-  const candidates = preferredTable === fallbackTable
-    ? [preferredTable]
-    : [preferredTable, fallbackTable];
-
-  let lastError: Error | null = null;
-  for (const table of candidates) {
-    try {
-      return await runQuery(table, options);
-    } catch (error: unknown) {
-      const normalized = error instanceof Error ? error : new Error('Unknown query error');
-      lastError = normalized;
-      const message = normalized.message || '';
-      if (!message.includes('schema cache')) {
-        break;
-      }
-    }
-  }
-
-  throw lastError ?? new Error('Failed to list entities');
+  // Always use the prefixed table name (e.g., dev_kpis, prod_kpis)
+  const table = sqlTableFor(options.kind);
+  return await runQuery(table, options);
 }
 
 export function sanitizeIdentifier(value: string | null | undefined): string | null {
