@@ -173,11 +173,26 @@ export default async function KPIDetailPage({ params }: { params: Promise<{ slug
   const { slug } = await params;
   
   let supabase;
-  let user;
-  let kpi;
+  let user = null;
+  let kpi = null;
   
   try {
     supabase = await createClient();
+  } catch (error) {
+    return (
+      <main style={{ padding: '2rem', textAlign: 'center' }}>
+        <h1>Configuration Error</h1>
+        <p style={{ color: 'var(--ifm-color-emphasis-600)', marginBottom: '1rem' }}>
+          Server configuration error. Please contact support.
+        </p>
+        <Link href="/kpis" style={{ color: 'var(--ifm-color-primary)' }}>
+          ← Back to KPIs
+        </Link>
+      </main>
+    );
+  }
+
+  try {
     const {
       data: { user: authUser },
     } = await supabase.auth.getUser();
@@ -186,12 +201,6 @@ export default async function KPIDetailPage({ params }: { params: Promise<{ slug
     // Use regular client (not admin) - RLS policies handle access control
     kpi = await fetchKpiBySlug(supabase, slug);
   } catch (error) {
-    console.error('[KPIDetailPage] Error fetching KPI:', {
-      slug,
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-    
     return (
       <main style={{ padding: '2rem', textAlign: 'center' }}>
         <h1>Error Loading KPI</h1>

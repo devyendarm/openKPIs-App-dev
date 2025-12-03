@@ -51,44 +51,21 @@ export async function fetchKpiBySlug(
   supabase: SupabaseClient,
   slug: string,
 ): Promise<NormalizedKpi | null> {
-  try {
-    const { data, error } = await supabase
-      .from(kpisTable)
-      .select('*')
-      .eq('slug', slug)
-      .maybeSingle();
+  const { data, error } = await supabase
+    .from(kpisTable)
+    .select('*')
+    .eq('slug', slug)
+    .maybeSingle();
 
-    if (error) {
-      console.error('[fetchKpiBySlug] Supabase error:', {
-        slug,
-        error: error.message,
-        code: error.code,
-        hint: error.hint,
-        details: error.details,
-      });
-      return null;
-    }
-
-    if (!data) {
-      return null;
-    }
-
-    try {
-      return normalizeKpi(data as KpiRow);
-    } catch (normalizeError) {
-      console.error('[fetchKpiBySlug] Normalization error:', {
-        slug,
-        error: normalizeError instanceof Error ? normalizeError.message : String(normalizeError),
-      });
-      return null;
-    }
-  } catch (error) {
-    console.error('[fetchKpiBySlug] Unexpected error:', {
-      slug,
-      error: error instanceof Error ? error.message : String(error),
-    });
+  if (error) {
     return null;
   }
+
+  if (!data) {
+    return null;
+  }
+
+  return normalizeKpi(data as KpiRow);
 }
 
 export { kpisTable };
