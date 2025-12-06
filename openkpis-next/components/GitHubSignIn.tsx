@@ -170,7 +170,7 @@ export default function GitHubSignIn() {
             </div>
 
             <div className="dropdown-section">
-              {(role === 'admin' || role === 'editor') && (
+              {['editor', 'admin'].includes((role || '').toLowerCase()) && (
                 <Link href="/editor/review" prefetch={false} role="menuitem" className="dropdown-item">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M2 2.5A1.5 1.5 0 013.5 1h9A1.5 1.5 0 0114 2.5V4H2V2.5zM2 5h12v8.5A1.5 1.5 0 0112.5 15h-9A1.5 1.5 0 012 13.5V5zm3 2a.5.5 0 000 1h6a.5.5 0 000-1H5z" />

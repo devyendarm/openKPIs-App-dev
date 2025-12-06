@@ -1,8 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { syncToGitHub } from '@/lib/services/github';
+import { getVerifiedEmailFromGitHubTokenCookie } from '@/lib/github/verifiedEmail';
 import { withTablePrefix } from '@/src/types/entities';
 
+type DashboardRow = {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  status: 'draft' | 'published' | 'archived';
+  created_by: string;
+  created_at: string;
+  last_modified_by?: string;
+  last_modified_at?: string;
+  github_pr_url?: string;
+  github_pr_number?: number;
+  github_commit_sha?: string;
+  github_file_path?: string;
+  [key: string]: unknown;
+};
 type SyncAction = 'created' | 'edited';
 
 const dashboardsTable = withTablePrefix('dashboards');
@@ -34,12 +53,14 @@ export async function POST(
     const contributorName = dashboard.created_by || 'unknown';
     const editorName = dashboard.last_modified_by || null;
     
+    const verifiedEmail = await getVerifiedEmailFromGitHubTokenCookie().catch(() => null);
     const result = await syncToGitHub({
       tableName: 'dashboards',
       record: dashboard,
       action,
       userLogin,
       userName: userLogin,
+      userEmail: verifiedEmail || undefined,
       contributorName,
       editorName,
     });

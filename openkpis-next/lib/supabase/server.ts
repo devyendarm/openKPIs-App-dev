@@ -34,18 +34,23 @@ export async function createClient() {
 
   return createServerClient(config.url, config.key, {
     cookies: {
-      getAll() {
-        return cookieStore.getAll();
+      get(name: string) {
+        return cookieStore.get(name)?.value;
       },
-      setAll(cookiesToSet) {
+      set(name: string, value: string, options?: { path?: string; maxAge?: number; sameSite?: 'lax' | 'strict' | 'none'; httpOnly?: boolean; secure?: boolean }) {
         try {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
+          cookieStore.set(name, value, options);
         } catch {
           // ignore in server components
         }
       },
+      remove(name: string, options?: { path?: string; maxAge?: number; sameSite?: 'lax' | 'strict' | 'none'; httpOnly?: boolean; secure?: boolean }) {
+        try {
+          cookieStore.set(name, '', { ...options, maxAge: 0 });
+        } catch {
+          // ignore in server components
+        }
+      }
     },
   });
 }

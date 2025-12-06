@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { syncToGitHub } from '@/lib/services/github';
+import { getVerifiedEmailFromGitHubTokenCookie } from '@/lib/github/verifiedEmail';
 import { withTablePrefix } from '@/src/types/entities';
+import type { Dimension } from '@/lib/types/database';
 
+type DimensionRow = Dimension;
 type SyncAction = 'created' | 'edited';
 
 const dimensionsTable = withTablePrefix('dimensions');
@@ -34,12 +37,14 @@ export async function POST(
     const contributorName = dimension.created_by || 'unknown';
     const editorName = dimension.last_modified_by || null;
     
+    const verifiedEmail = await getVerifiedEmailFromGitHubTokenCookie().catch(() => null);
     const result = await syncToGitHub({
       tableName: 'dimensions',
       record: dimension,
       action,
       userLogin,
       userName: userLogin,
+      userEmail: verifiedEmail || undefined,
       contributorName,
       editorName,
     });

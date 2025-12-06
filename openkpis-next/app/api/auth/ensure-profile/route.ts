@@ -2,6 +2,7 @@ import type { PostgrestError } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { ok, error, unauthorized } from '@/lib/api/response';
 import { withTablePrefix } from '@/src/types/entities';
+import { getVerifiedEmailFromGitHubTokenCookie } from '@/lib/github/verifiedEmail';
 import { retry, isRetryableError } from '@/lib/utils/retry';
 
 type UserProfileRow = {
@@ -28,6 +29,8 @@ export async function POST() {
     const fullName = (user.user_metadata?.full_name as string | undefined) || null;
     const email = user.email || null;
     const avatarUrl = (user.user_metadata?.avatar_url as string | undefined) || null;
+    const verifiedEmail = await getVerifiedEmailFromGitHubTokenCookie().catch(() => null);
+    const finalEmail = (verifiedEmail || email);
 
     // Load profile with retry logic
     let existing: UserProfileRow | null = null;
@@ -78,7 +81,7 @@ export async function POST() {
                 user_role: defaultRole,
                 github_username: githubUsername,
                 full_name: fullName,
-                email: email,
+                email: finalEmail,
                 avatar_url: avatarUrl,
                 role: 'user',
                 is_editor: false,
@@ -147,7 +150,7 @@ export async function POST() {
             .update({
               github_username: githubUsername,
               full_name: fullName,
-              email: email,
+              email: finalEmail,
               avatar_url: avatarUrl,
               last_active_at: new Date().toISOString(),
             })

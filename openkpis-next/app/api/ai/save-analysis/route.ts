@@ -59,6 +59,12 @@ type SaveAnalysisRequestBody = {
   aiExpanded?: Record<string, unknown> | null;
 };
 
+type SearchRow = {
+  id: string;
+  slug: string | null;
+  name: string;
+};
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();

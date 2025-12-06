@@ -11,6 +11,12 @@ type AnalysisItemsPayload = {
   submittedItems?: string[];
 };
 
+type SqlSourceRow = {
+  name: string;
+  sql_query?: string | null;
+  slug?: string | null;
+};
+
 const kpisTable = withTablePrefix('kpis');
 const metricsTable = withTablePrefix('metrics');
 

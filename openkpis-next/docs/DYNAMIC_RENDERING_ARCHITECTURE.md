@@ -102,3 +102,4 @@ const { user } = useAuth();
 - [Supabase SSR Guide](https://supabase.com/docs/guides/auth/server-side/nextjs)
 
 
+

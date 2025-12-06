@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import GiscusComments from '@/components/GiscusComments';
 import Sidebar from '@/components/Sidebar';
 import TableOfContents from '@/components/TableOfContents';
@@ -20,8 +20,8 @@ export default async function DimensionDetailPage({ params }: { params: Promise<
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Use regular client (not admin) - RLS policies handle access control
-  const dimension = await fetchDimensionBySlug(supabase, slug);
+  const admin = createAdminClient();
+  const dimension = await fetchDimensionBySlug(admin, slug);
 
   if (!dimension) {
     return (

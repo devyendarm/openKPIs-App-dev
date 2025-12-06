@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { signInWithGitHub } from '@/lib/supabase/auth';
 import { useAuth } from '@/app/providers/AuthClientProvider';
@@ -122,7 +121,7 @@ export default function GiscusComments({ term, category = 'kpis' }: GiscusCommen
 
   // Listen for auth state changes
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
         // Wait a bit for the session to fully initialize
         setTimeout(() => {

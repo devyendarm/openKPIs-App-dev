@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import LikeButton from '@/components/LikeButton';
 import { STATUS } from '@/lib/supabase/auth';
 import { fetchMetricBySlug } from '@/lib/server/metrics';
@@ -18,8 +18,8 @@ export default async function MetricDetailPage({ params }: { params: Promise<{ s
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Use regular client (not admin) - RLS policies handle access control
-  const metric = await fetchMetricBySlug(supabase, slug);
+  const admin = createAdminClient();
+  const metric = await fetchMetricBySlug(admin, slug);
 
   if (!metric) {
     return (

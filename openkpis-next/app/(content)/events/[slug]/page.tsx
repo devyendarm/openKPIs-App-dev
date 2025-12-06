@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import GiscusComments from '@/components/GiscusComments';
 import Sidebar from '@/components/Sidebar';
 import TableOfContents from '@/components/TableOfContents';
@@ -56,8 +56,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Use regular client (not admin) - RLS policies handle access control
-  const { data: rawEvent, error } = await supabase
+  const admin = createAdminClient();
+  const { data: rawEvent, error } = await admin
     .from(eventsTable)
     .select('*')
     .eq('slug', slug)

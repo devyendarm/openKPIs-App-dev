@@ -21,9 +21,9 @@ export const config = {
     // Client-accessible URLs (use NEXT_PUBLIC_ for client components)
     contentRepoFull: `${process.env.NEXT_PUBLIC_GITHUB_REPO_OWNER || process.env.GITHUB_REPO_OWNER || 'devyendarm'}/${process.env.NEXT_PUBLIC_GITHUB_CONTENT_REPO_NAME || process.env.GITHUB_CONTENT_REPO_NAME || process.env.GITHUB_CONTENT_REPO || 'openKPIs-Content'}`,
     appRepoFull: `${process.env.NEXT_PUBLIC_GITHUB_REPO_OWNER || process.env.GITHUB_REPO_OWNER || 'devyendarm'}/${process.env.NEXT_PUBLIC_GITHUB_APP_REPO_NAME || process.env.GITHUB_APP_REPO_NAME || 'openKPIs-App'}`,
-    // GitHub URLs for UI links (client components - only use NEXT_PUBLIC_ vars)
-    appRepoUrl: `https://github.com/${process.env.NEXT_PUBLIC_GITHUB_REPO_OWNER || 'devyendarm'}/${process.env.NEXT_PUBLIC_GITHUB_APP_REPO_NAME || 'openKPIs-App'}`,
-    contentRepoUrl: `https://github.com/${process.env.NEXT_PUBLIC_GITHUB_REPO_OWNER || 'devyendarm'}/${process.env.NEXT_PUBLIC_GITHUB_CONTENT_REPO_NAME || 'openKPIs-Content'}`,
+    // GitHub URLs for UI links
+    appRepoUrl: `https://github.com/${process.env.NEXT_PUBLIC_GITHUB_REPO_OWNER || process.env.GITHUB_REPO_OWNER || 'devyendarm'}/${process.env.NEXT_PUBLIC_GITHUB_APP_REPO_NAME || process.env.GITHUB_APP_REPO_NAME || 'openKPIs-App'}`,
+    contentRepoUrl: `https://github.com/${process.env.NEXT_PUBLIC_GITHUB_REPO_OWNER || process.env.GITHUB_REPO_OWNER || 'devyendarm'}/${process.env.NEXT_PUBLIC_GITHUB_CONTENT_REPO_NAME || process.env.GITHUB_CONTENT_REPO_NAME || process.env.GITHUB_CONTENT_REPO || 'openKPIs-Content'}`,
   },
   
   // Feature Flags

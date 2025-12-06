@@ -1,6 +1,7 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { createAdminClient } from '@/lib/supabase/server';
 import { syncToGitHub } from '@/lib/services/github';
+import { getVerifiedEmailFromGitHubTokenCookie } from '@/lib/github/verifiedEmail';
 import type { EntityKind } from '@/src/types/entities';
 import { tableFor, withTablePrefix } from '@/src/types/entities';
 
@@ -128,12 +129,15 @@ export async function updateEntityDraftAndSync(params: UpdateInput): Promise<Upd
 	const editorName =
 		typeof record.last_modified_by === 'string' && record.last_modified_by.length > 0 ? record.last_modified_by : userHandle;
 
+	const verifiedEmail = await getVerifiedEmailFromGitHubTokenCookie().catch(() => null);
+
 	const syncResult = await syncToGitHub({
 		tableName: tableName as 'kpis' | 'events' | 'dimensions' | 'metrics' | 'dashboards',
 		record,
 		action: 'edited',
 		userLogin: editorName,
 		userName: editorName,
+		userEmail: verifiedEmail || user.email || undefined,
 		contributorName,
 		editorName,
 	});

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { syncToGitHub } from '@/lib/services/github';
+import { getVerifiedEmailFromGitHubTokenCookie } from '@/lib/github/verifiedEmail';
 import { withTablePrefix } from '@/src/types/entities';
+import type { Metric } from '@/lib/types/database';
 
+type MetricRow = Metric;
 type SyncAction = 'created' | 'edited';
 
 const metricsTable = withTablePrefix('metrics');
@@ -34,12 +37,14 @@ export async function POST(
     const contributorName = metric.created_by || 'unknown';
     const editorName = metric.last_modified_by || null;
     
+    const verifiedEmail = await getVerifiedEmailFromGitHubTokenCookie().catch(() => null);
     const result = await syncToGitHub({
       tableName: 'metrics',
       record: metric,
       action,
       userLogin,
       userName: userLogin,
+      userEmail: verifiedEmail || undefined,
       contributorName,
       editorName,
     });

@@ -133,6 +133,11 @@ export async function POST(request: NextRequest) {
     // Trigger GitHub sync directly (non-blocking, but we'll wait for it)
     let githubResult: { success: boolean; error?: string; pr_url?: string } = { success: false };
     try {
+      // Prefer verified GitHub email for author attribution (counts toward user contributions)
+      const { getVerifiedEmailFromGitHubTokenCookie } = await import('@/lib/github/verifiedEmail');
+      const verifiedEmail = await getVerifiedEmailFromGitHubTokenCookie().catch(() => null);
+      const authorEmail = verifiedEmail || user.email || undefined;
+
       // Call syncToGitHub service directly instead of HTTP call
       // Type the record properly for syncToGitHub
       const recordForSync = {
@@ -154,7 +159,7 @@ export async function POST(request: NextRequest) {
         action: 'created',
         userLogin: userName,
         userName,
-        userEmail: user.email || undefined,
+        userEmail: authorEmail,
       });
 
       if (syncResult.success) {

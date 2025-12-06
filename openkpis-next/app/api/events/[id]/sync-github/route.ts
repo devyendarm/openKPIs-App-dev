@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { syncToGitHub } from '@/lib/services/github';
+import { getVerifiedEmailFromGitHubTokenCookie } from '@/lib/github/verifiedEmail';
 import { withTablePrefix } from '@/src/types/entities';
+import type { Event } from '@/lib/types/database';
 
+type EventRow = Event;
 type SyncAction = 'created' | 'edited';
 
 const eventsTable = withTablePrefix('events');
@@ -34,12 +37,14 @@ export async function POST(
     const contributorName = event.created_by || 'unknown';
     const editorName = event.last_modified_by || null;
     
+    const verifiedEmail = await getVerifiedEmailFromGitHubTokenCookie().catch(() => null);
     const result = await syncToGitHub({
       tableName: 'events',
       record: event,
       action,
       userLogin,
       userName: userLogin,
+      userEmail: verifiedEmail || undefined,
       contributorName,
       editorName,
     });

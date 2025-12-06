@@ -18,6 +18,13 @@ type ExcelRequestBody = {
   submittedItems?: string[];
 };
 
+type EntityRow = {
+  name: string;
+  description?: string | null;
+  category?: string | null;
+  tags?: string[] | null;
+};
+
 const kpisTable = withTablePrefix('kpis');
 const metricsTable = withTablePrefix('metrics');
 const dimensionsTable = withTablePrefix('dimensions');

@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import LikeButton from '@/components/LikeButton';
 import { fetchDashboardBySlug } from '@/lib/server/dashboards';
 import { collectUserIdentifiers } from '@/lib/server/entities';
@@ -16,8 +16,8 @@ export default async function DashboardDetailPage({ params }: { params: Promise<
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Use regular client (not admin) - RLS policies handle access control
-  const dashboard = await fetchDashboardBySlug(supabase, slug);
+  const admin = createAdminClient();
+  const dashboard = await fetchDashboardBySlug(admin, slug);
 
   if (!dashboard) {
     return (
