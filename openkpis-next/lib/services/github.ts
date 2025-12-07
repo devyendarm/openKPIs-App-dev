@@ -412,13 +412,12 @@ async function commitWithUserToken(
     // File doesn't exist – continue
   }
 
-  // Create/update file - commit as USER (not bot)
-  // User token with 'repo' scope CAN commit to branches in public repos, even if App created the branch
-  // Ensure userLogin is always used as fallback (it's required, but double-check)
+  // USER TOKEN APPROACH: Use user token to commit (for contributions)
+  // This ensures commits count toward user's GitHub contributions
   const authorName = params.userName || params.userLogin || 'Unknown User';
   const authorEmail = params.userEmail || `${params.userLogin || 'unknown'}@users.noreply.github.com`;
   
-  // Wrap commit in try-catch to handle failures after branch creation
+  // Use USER TOKEN to commit (not App) - this is critical for contributions
   let commitData;
   try {
     const commitResponse = await octokit.repos.createOrUpdateFileContents({
@@ -442,7 +441,7 @@ async function commitWithUserToken(
       },
     });
     commitData = commitResponse.data;
-    console.log('[GitHub Sync] Commit created using user token - will count toward contributions');
+    console.log('[GitHub Sync] Commit created using USER TOKEN - will count toward contributions');
   } catch (commitError) {
     const err = commitError as { status?: number; message?: string };
     console.error('[GitHub Sync] Commit failed after branch creation:', {
@@ -455,20 +454,6 @@ async function commitWithUserToken(
     });
     
     // Branch was created but commit failed
-    // This usually means user token doesn't have write access to the branch
-    if (err.status === 404) {
-      throw new Error(
-        `Branch created but user token cannot write to it (404). ` +
-        `This usually means:\n` +
-        `1. User token doesn't have 'repo' scope - please sign out and sign back in\n` +
-        `2. User is not a collaborator on the repository\n` +
-        `3. Repository is private and user doesn't have access\n` +
-        `Branch: ${branchName}, Repository: ${GITHUB_OWNER}/${GITHUB_CONTENT_REPO}`
-      );
-    }
-    
-    // Note: We don't delete the branch here as it might be useful for debugging
-    // The branch will remain orphaned, but this is acceptable for error tracking
     throw new Error(`Branch created but commit failed: ${err.message || 'Unknown error'}. Branch: ${branchName}`);
   }
 
