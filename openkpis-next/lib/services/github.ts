@@ -235,7 +235,14 @@ async function commitWithUserToken(
   file_path?: string;
   error?: string;
 }> {
-  console.log('[GitHub Sync] Using GitHub App with user attribution - commits will count toward contributions');
+  // Check if draft folder approach is enabled
+  const USE_DRAFT_FOLDER = process.env.GITHUB_USE_DRAFT_FOLDER === 'true';
+  
+  if (USE_DRAFT_FOLDER) {
+    console.log('[GitHub Sync] Draft folder approach enabled - committing directly to main branch using GitHub App');
+  } else {
+    console.log('[GitHub Sync] Using GitHub App with user attribution - commits will count toward contributions');
+  }
   // Note: userToken is passed but not used for operations - we use App for all operations
   // User token is only needed to get user info (email) for attribution, which is already in params.userEmail
   
@@ -254,10 +261,20 @@ async function commitWithUserToken(
   }
   
   const fileName = `${params.record.slug || params.record.name || params.record.id || 'untitled'}.yml`;
-  const filePath = `data-layer/${params.tableName}/${fileName}`;
+  
+  // Check if draft folder approach is enabled
+  const USE_DRAFT_FOLDER = process.env.GITHUB_USE_DRAFT_FOLDER === 'true';
+  
+  // Determine file path and branch based on approach
+  const filePath = USE_DRAFT_FOLDER
+    ? `data-layer-draft/${params.tableName}/${fileName}`  // Draft folder approach
+    : `data-layer/${params.tableName}/${fileName}`;        // Regular approach
+  
   // Use slug, name, or id for branch name - ensure at least one exists
   const branchIdentifier = params.record.slug || params.record.name || params.record.id || 'untitled';
-  const branchName = `${params.action}-${params.tableName}-${branchIdentifier}-${Date.now()}`;
+  const branchName = USE_DRAFT_FOLDER
+    ? 'main'  // Draft folder: commit directly to main
+    : `${params.action}-${params.tableName}-${branchIdentifier}-${Date.now()}`;  // Regular: feature branch
 
   // GITHUB-SUPPORTED APPROACH FOR ORGANIZATION REPOSITORIES:
   // In org repos, users with 'repo' scope CANNOT create branches unless they are collaborators.
@@ -310,7 +327,7 @@ async function commitWithUserToken(
     },
   });
 
-  // Get main branch using App (has org access)
+  // Get main branch using App (has org access) - needed for both approaches
   let mainRef;
   try {
     const refData = await appOctokit.git.getRef({
@@ -332,23 +349,28 @@ async function commitWithUserToken(
     throw new Error(`Failed to get main branch: ${err.message || 'Unknown error'}`);
   }
 
-  // Create branch using App (has org write access)
-  try {
-    await appOctokit.git.createRef({
-      owner: GITHUB_OWNER,
-      repo: GITHUB_CONTENT_REPO,
-      ref: `refs/heads/${branchName}`,
-      sha: mainRef.object.sha,
-    });
-    console.log(`[GitHub Sync] Branch created using GitHub App: ${branchName}`);
-  } catch (error) {
-    const err = error as { status?: number; message?: string };
-    // Check if branch already exists (422 error)
-    if (err.status === 422 || err.message?.includes('already exists')) {
-      console.warn(`[GitHub Sync] Branch ${branchName} already exists, continuing with commit`);
-    } else {
-      throw new Error(`Failed to create branch: ${err.message || 'Unknown error'}`);
+  // Create branch only if NOT using draft folder approach
+  if (!USE_DRAFT_FOLDER) {
+    // Create branch using App (has org write access)
+    try {
+      await appOctokit.git.createRef({
+        owner: GITHUB_OWNER,
+        repo: GITHUB_CONTENT_REPO,
+        ref: `refs/heads/${branchName}`,
+        sha: mainRef.object.sha,
+      });
+      console.log(`[GitHub Sync] Branch created using GitHub App: ${branchName}`);
+    } catch (error) {
+      const err = error as { status?: number; message?: string };
+      // Check if branch already exists (422 error)
+      if (err.status === 422 || err.message?.includes('already exists')) {
+        console.warn(`[GitHub Sync] Branch ${branchName} already exists, continuing with commit`);
+      } else {
+        throw new Error(`Failed to create branch: ${err.message || 'Unknown error'}`);
+      }
     }
+  } else {
+    console.log(`[GitHub Sync] Draft folder approach - committing directly to main branch`);
   }
 
   // Check if file exists (using App)
@@ -400,9 +422,13 @@ async function commitWithUserToken(
       owner: GITHUB_OWNER,
       repo: GITHUB_CONTENT_REPO,
       path: filePath,
-      message: params.action === 'created'
-        ? `Add ${params.tableName.slice(0, -1)}: ${params.record.name}`
-        : `Update ${params.tableName.slice(0, -1)}: ${params.record.name}`,
+      message: USE_DRAFT_FOLDER
+        ? (params.action === 'created'
+            ? `Add draft ${params.tableName.slice(0, -1)}: ${params.record.name}`
+            : `Update draft ${params.tableName.slice(0, -1)}: ${params.record.name}`)
+        : (params.action === 'created'
+            ? `Add ${params.tableName.slice(0, -1)}: ${params.record.name}`
+            : `Update ${params.tableName.slice(0, -1)}: ${params.record.name}`),
       content: Buffer.from(yamlContent).toString('base64'),
       branch: branchName,
       sha: existingFileSha,
@@ -445,61 +471,71 @@ async function commitWithUserToken(
     throw new Error('Invalid commit response from GitHub');
   }
 
-  // Create PR using App (has org access)
-  // Wrap in try-catch to handle PR creation failures gracefully
-  let prData;
-  try {
-    const prResponse = await appOctokit.pulls.create({
-      owner: GITHUB_OWNER,
-      repo: GITHUB_CONTENT_REPO,
-      title: params.action === 'created'
-        ? `Add ${params.tableName.slice(0, -1)}: ${params.record.name}`
-        : `Update ${params.tableName.slice(0, -1)}: ${params.record.name}`,
-      head: branchName,
-      base: 'main',
-      body: prBody,
-      maintainer_can_modify: true,
-    });
-    prData = prResponse.data;
-    console.log('[GitHub Sync] PR created using GitHub App');
-  } catch (prError) {
-    const err = prError as { status?: number; message?: string };
-    console.error('[GitHub Sync] PR creation failed after successful commit:', err);
-    
-    // Commit succeeded but PR failed - return partial success with commit info
-    // The branch and commit exist, but no PR was created
-    // This allows the caller to handle the partial success appropriately
+  // Create PR only if NOT using draft folder approach
+  if (!USE_DRAFT_FOLDER) {
+    // Create PR using App (has org access)
+    // Wrap in try-catch to handle PR creation failures gracefully
+    let prData;
+    try {
+      const prResponse = await appOctokit.pulls.create({
+        owner: GITHUB_OWNER,
+        repo: GITHUB_CONTENT_REPO,
+        title: params.action === 'created'
+          ? `Add ${params.tableName.slice(0, -1)}: ${params.record.name}`
+          : `Update ${params.tableName.slice(0, -1)}: ${params.record.name}`,
+        head: branchName,
+        base: 'main',
+        body: prBody,
+        maintainer_can_modify: true,
+      });
+      prData = prResponse.data;
+      console.log('[GitHub Sync] PR created using GitHub App');
+      
+      // Validate PR response data
+      if (!prData || typeof prData.number !== 'number' || !prData.html_url) {
+        console.error('[GitHub Sync] PR creation succeeded but response is invalid:', prData);
+        return {
+          success: false,
+          error: 'PR created but response is invalid',
+          commit_sha: commitData.commit.sha,
+          branch: branchName,
+          file_path: filePath,
+        };
+      }
+      
+      return {
+        success: true,
+        commit_sha: commitData.commit.sha,
+        pr_number: prData.number,
+        pr_url: prData.html_url,
+        branch: branchName,
+        file_path: filePath,
+      };
+    } catch (prError) {
+      const err = prError as { status?: number; message?: string };
+      console.error('[GitHub Sync] PR creation failed after successful commit:', err);
+      
+      // Commit succeeded but PR failed - return partial success with commit info
+      return {
+        success: false,
+        error: `Commit created successfully, but PR creation failed: ${err.message || 'Unknown error'}. Branch: ${branchName}, Commit SHA: ${commitData.commit.sha}`,
+        commit_sha: commitData.commit.sha,
+        branch: branchName,
+        file_path: filePath,
+        // No pr_number or pr_url since PR creation failed
+      };
+    }
+  } else {
+    // Draft folder approach - no PR needed, commit is already on main
+    console.log('[GitHub Sync] Draft folder approach - commit on main, no PR created');
     return {
-      success: false,
-      error: `Commit created successfully, but PR creation failed: ${err.message || 'Unknown error'}. Branch: ${branchName}, Commit SHA: ${commitData.commit.sha}`,
+      success: true,
       commit_sha: commitData.commit.sha,
       branch: branchName,
       file_path: filePath,
-      // No pr_number or pr_url since PR creation failed
+      // No pr_number or pr_url for draft folder approach
     };
   }
-
-  // Validate PR response data
-  if (!prData || typeof prData.number !== 'number' || !prData.html_url) {
-    // This should not happen if PR creation succeeded, but validate anyway
-    console.error('[GitHub Sync] PR creation succeeded but response is invalid:', prData);
-    return {
-      success: false,
-      error: 'PR created but response is invalid',
-      commit_sha: commitData.commit.sha,
-      branch: branchName,
-      file_path: filePath,
-    };
-  }
-
-  return {
-    success: true,
-    commit_sha: commitData.commit.sha,
-    pr_number: prData.number,
-    pr_url: prData.html_url,
-    branch: branchName,
-    file_path: filePath,
-  };
 }
 
 // Bot commit function removed - user token covers 100% of contribution requirements
