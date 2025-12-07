@@ -196,11 +196,20 @@ export async function POST(request: NextRequest) {
       // This is more reliable than user.email which might not be verified
       if (!authorEmail) {
         const githubUsername = user.user_metadata?.preferred_username || 
-                              user.user_metadata?.user_name || 
-                              userName || 
-                              'unknown';
-        authorEmail = `${githubUsername}@users.noreply.github.com`;
-        console.warn('[Create Item] No verified email found, using GitHub noreply format:', authorEmail);
+                              user.user_metadata?.user_name;
+        if (githubUsername && githubUsername !== 'unknown') {
+          authorEmail = `${githubUsername}@users.noreply.github.com`;
+          console.warn('[Create Item] No verified email found, using GitHub noreply format:', authorEmail);
+        } else {
+          // If we can't get a valid GitHub username, we cannot create a valid noreply email
+          // This should rarely happen if user is properly authenticated with GitHub OAuth
+          console.error('[Create Item] Cannot determine GitHub username for noreply email. User may need to re-authenticate.');
+          // Use user.email as last resort (may not count toward contributions if not verified on GitHub)
+          authorEmail = user.email || undefined;
+          if (!authorEmail) {
+            throw new Error('Cannot determine author email for GitHub commit. Please ensure your GitHub account has a verified email address.');
+          }
+        }
       }
 
       // Call syncToGitHub service directly instead of HTTP call

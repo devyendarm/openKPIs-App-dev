@@ -374,12 +374,24 @@ async function commitWithUserToken(
   
   // Email priority: verified email > GitHub noreply format > fallback
   // GitHub noreply format (username@users.noreply.github.com) counts if user has ANY verified email
-  const authorEmail = params.userEmail || `${params.userLogin || 'unknown'}@users.noreply.github.com`;
+  // IMPORTANT: If userLogin is 'unknown', we cannot create a valid noreply email
+  // In this case, we must have a verified email or the commit won't count toward contributions
+  let authorEmail: string;
+  if (params.userEmail) {
+    authorEmail = params.userEmail;
+  } else if (params.userLogin && params.userLogin !== 'unknown') {
+    authorEmail = `${params.userLogin}@users.noreply.github.com`;
+  } else {
+    // Last resort: use user's email from Supabase (may not count if not verified on GitHub)
+    // This should rarely happen if user is properly authenticated with GitHub OAuth
+    throw new Error('Cannot determine author email for GitHub commit. User must have a verified GitHub email or valid GitHub username.');
+  }
   
   console.log('[GitHub Sync] Using author email for contributions:', {
     email: authorEmail,
-    isVerified: !!params.userEmail && params.userEmail !== `${params.userLogin}@users.noreply.github.com`,
+    isVerified: !!params.userEmail,
     isNoreply: authorEmail.endsWith('@users.noreply.github.com'),
+    userLogin: params.userLogin,
   });
   
   let commitData;
