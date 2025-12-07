@@ -4,6 +4,7 @@
  */
 
 import { Octokit } from '@octokit/rest';
+import { createAppAuth } from '@octokit/auth-app';
 
 // Note: Content PRs go to GITHUB_CONTENT_REPO_NAME repository (not the app repo)
 const GITHUB_OWNER = process.env.GITHUB_REPO_OWNER || 'devyendarm';
@@ -253,10 +254,42 @@ async function commitWithUserToken(
     throw new Error(`Failed to verify repository access: ${err.message || 'Unknown error'}`);
   }
 
-  // Get main branch
+  // HYBRID APPROACH: Use GitHub App to create branch (has org access)
+  // Then use user token for commit (counts toward contributions)
+  const appId = process.env.GITHUB_APP_ID;
+  const installationIdStr = process.env.GITHUB_INSTALLATION_ID;
+  const b64Key = process.env.GITHUB_APP_PRIVATE_KEY_B64;
+  
+  if (!appId || !installationIdStr || !b64Key) {
+    throw new Error('GitHub App credentials not configured. Cannot create branch in organization repository.');
+  }
+
+  // Create GitHub App client for branch operations
+  let privateKey: string;
+  try {
+    const key = Buffer.from(b64Key.trim(), 'base64').toString('utf8');
+    if (key.includes('BEGIN') && key.includes('END')) {
+      privateKey = key.replace(/\r\n/g, '\n');
+    } else {
+      throw new Error('Invalid private key format');
+    }
+  } catch (error) {
+    throw new Error('Failed to decode GitHub App private key');
+  }
+
+  const appOctokit = new Octokit({
+    authStrategy: createAppAuth,
+    auth: {
+      appId: Number(appId),
+      privateKey,
+      installationId: parseInt(installationIdStr, 10),
+    },
+  });
+
+  // Get main branch using App (has org access)
   let mainRef;
   try {
-    const refData = await octokit.git.getRef({
+    const refData = await appOctokit.git.getRef({
       owner: GITHUB_OWNER,
       repo: GITHUB_CONTENT_REPO,
       ref: 'heads/main',
@@ -270,19 +303,17 @@ async function commitWithUserToken(
     throw new Error(`Failed to get main branch: ${err.message || 'Unknown error'}`);
   }
 
-  // Create branch
+  // Create branch using App (has org access)
   try {
-    await octokit.git.createRef({
+    await appOctokit.git.createRef({
       owner: GITHUB_OWNER,
       repo: GITHUB_CONTENT_REPO,
       ref: `refs/heads/${branchName}`,
       sha: mainRef.object.sha,
     });
+    console.log(`[GitHub Sync] Branch created using GitHub App: ${branchName}`);
   } catch (error) {
     const err = error as { status?: number; message?: string };
-    if (err.status === 404) {
-      throw new Error(`Cannot create branch in ${GITHUB_OWNER}/${GITHUB_CONTENT_REPO}. User token may not have 'repo' scope or write access.`);
-    }
     throw new Error(`Failed to create branch: ${err.message || 'Unknown error'}`);
   }
 
