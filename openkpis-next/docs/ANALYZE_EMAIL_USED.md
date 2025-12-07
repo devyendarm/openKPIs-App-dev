@@ -8,7 +8,7 @@
   "email": "devyendar.maganti@gmail.com",
   "preferred_username": "devyendar-maganti",
   "email_verified": true,
-  "token": "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"
+  "token": "gho_XXXXXXXXXXXXX" // Redacted for security
 }
 ```
 
@@ -27,7 +27,7 @@
 
 ### Step 2: Fetch from GitHub API
 **Code:** `app/api/items/create/route.ts` (lines 167-191)
-- Uses token: `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`
+- Uses token from cookie (redacted for security)
 - Calls: `GET https://api.github.com/user/emails`
 - Returns: Primary verified email OR any verified email
 
@@ -156,7 +156,7 @@ WHERE id = '01bf7d8c-2bd4-478d-b4c9-af3de4bd989c';
 ## Summary
 
 **Based on your data:**
-- ✅ Token is valid: `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`
+- ✅ Token is valid (present in cookie and user_metadata)
 - ✅ Username is valid: `devyendar-maganti`
 - ✅ Email is verified in Supabase: `devyendar.maganti@gmail.com`
 
