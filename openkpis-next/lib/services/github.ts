@@ -211,20 +211,53 @@ async function commitWithUserToken(
   const filePath = `data-layer/${params.tableName}/${fileName}`;
   const branchName = `${params.action}-${params.tableName}-${params.record.slug}-${Date.now()}`;
 
+  // Verify repository access before attempting operations
+  try {
+    await octokit.repos.get({
+      owner: GITHUB_OWNER,
+      repo: GITHUB_CONTENT_REPO,
+    });
+    console.log(`[GitHub Sync] Verified access to repository: ${GITHUB_OWNER}/${GITHUB_CONTENT_REPO}`);
+  } catch (error) {
+    const err = error as { status?: number; message?: string };
+    if (err.status === 404) {
+      throw new Error(`Repository not found or no access: ${GITHUB_OWNER}/${GITHUB_CONTENT_REPO}. User token may not have 'repo' scope or repository access.`);
+    }
+    throw new Error(`Failed to verify repository access: ${err.message || 'Unknown error'}`);
+  }
+
   // Get main branch
-  const { data: mainRef } = await octokit.git.getRef({
-    owner: GITHUB_OWNER,
-    repo: GITHUB_CONTENT_REPO,
-    ref: 'heads/main',
-  });
+  let mainRef;
+  try {
+    const refData = await octokit.git.getRef({
+      owner: GITHUB_OWNER,
+      repo: GITHUB_CONTENT_REPO,
+      ref: 'heads/main',
+    });
+    mainRef = refData.data;
+  } catch (error) {
+    const err = error as { status?: number; message?: string };
+    if (err.status === 404) {
+      throw new Error(`Main branch not found in ${GITHUB_OWNER}/${GITHUB_CONTENT_REPO}. Repository may be empty or branch name is different.`);
+    }
+    throw new Error(`Failed to get main branch: ${err.message || 'Unknown error'}`);
+  }
 
   // Create branch
-  await octokit.git.createRef({
-    owner: GITHUB_OWNER,
-    repo: GITHUB_CONTENT_REPO,
-    ref: `refs/heads/${branchName}`,
-    sha: mainRef.object.sha,
-  });
+  try {
+    await octokit.git.createRef({
+      owner: GITHUB_OWNER,
+      repo: GITHUB_CONTENT_REPO,
+      ref: `refs/heads/${branchName}`,
+      sha: mainRef.object.sha,
+    });
+  } catch (error) {
+    const err = error as { status?: number; message?: string };
+    if (err.status === 404) {
+      throw new Error(`Cannot create branch in ${GITHUB_OWNER}/${GITHUB_CONTENT_REPO}. User token may not have 'repo' scope or write access.`);
+    }
+    throw new Error(`Failed to create branch: ${err.message || 'Unknown error'}`);
+  }
 
   // Check if file exists
   let existingFileSha: string | undefined;
@@ -437,8 +470,21 @@ export async function syncToGitHub(params: GitHubSyncParams): Promise<{
         try {
           return await commitWithUserToken(userToken, params);
         } catch (error) {
+          const err = error as { message?: string; status?: number };
           console.error('[GitHub Sync] User token commit failed:', error);
-          // Fall through to check if we should use bot or require reauth
+          
+          // If 404 (repository not found/no access), require reauth
+          // This usually means token doesn't have 'repo' scope or user not a collaborator
+          if (err.status === 404 || err.message?.includes('not found') || err.message?.includes('no access')) {
+            console.warn('[GitHub Sync] Repository access denied (404) - user token may not have repo scope');
+            return {
+              success: false,
+              error: err.message || 'Repository access denied. Please sign in again and grant repository permissions.',
+              requiresReauth: true,
+            };
+          }
+          
+          // For other errors, fall through to bot fallback
         }
       }
       
