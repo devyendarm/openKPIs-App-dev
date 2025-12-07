@@ -9,6 +9,8 @@ The application uses **TWO different GitHub apps** for different purposes:
 **Where configured:** Supabase Dashboard  
 **Used by:** `lib/supabase/auth.ts` → `signInWithGitHub()`
 
+**Important:** OAuth Apps don't have "repo access" settings like GitHub Apps. They request **scopes** which users grant during authorization.
+
 ### 2. GitHub App (Repository Access - Bot)
 **Purpose:** Creating commits/PRs when user token unavailable  
 **Where configured:** Vercel Environment Variables  
@@ -17,6 +19,19 @@ The application uses **TWO different GitHub apps** for different purposes:
 ---
 
 ## 1. GitHub OAuth App (User Login)
+
+### Key Difference: OAuth Apps vs GitHub Apps
+
+**GitHub OAuth Apps:**
+- ❌ **NO granular permissions** (like "repo access" toggle)
+- ✅ **Request scopes** (like `repo`, `user:email`)
+- ✅ **User grants scopes** when they authorize
+- ✅ **Scopes are set in CODE**, not in OAuth App settings
+
+**GitHub Apps:**
+- ✅ **Have granular permissions** (Contents: Read & Write, etc.)
+- ✅ **Configured in app settings**
+- ✅ **Installed on repositories**
 
 ### Where It's Configured
 
@@ -30,6 +45,7 @@ The application uses **TWO different GitHub apps** for different purposes:
    - ✅ **Client ID**: From GitHub OAuth App
    - ✅ **Client Secret**: From GitHub OAuth App
    - ✅ **Redirect URL**: Auto-configured by Supabase
+   - ❌ **NO "Scopes" field** (scopes are set in code, not here)
 
 ### How to Create GitHub OAuth App
 
@@ -41,9 +57,36 @@ The application uses **TWO different GitHub apps** for different purposes:
    - **Authorization callback URL**: `https://YOUR-SUPABASE-PROJECT.supabase.co/auth/v1/callback`
      - Get Supabase URL from: Supabase Dashboard → Settings → API → Project URL
 4. Click **"Register application"**
-5. Copy:
+5. **Note:** OAuth App settings page does NOT have "repo access" or permissions toggles
+6. Copy:
    - **Client ID** → Paste in Supabase Dashboard
    - **Client Secret** → Generate and paste in Supabase Dashboard
+
+### How Scopes Work (OAuth Apps)
+
+**OAuth Apps request scopes in the CODE, not in GitHub settings:**
+
+```typescript
+// lib/supabase/auth.ts - Line 58
+await supabase.auth.signInWithOAuth({
+  provider: 'github',
+  options: {
+    scopes: 'read:user user:email repo',  // ← Scopes requested HERE
+  },
+});
+```
+
+**What happens:**
+1. User clicks "Sign in with GitHub"
+2. GitHub shows authorization page: "OpenKPIs DEV is requesting..."
+3. User sees: "Repositories: Public and private" (because `repo` scope is requested)
+4. User grants permission → Token has `repo` scope
+5. Token stored in cookie and Supabase
+
+**If user signed in BEFORE `repo` scope was added:**
+- Their token doesn't have `repo` scope
+- They need to **re-authenticate** to get new scopes
+- This is why you're getting 404 errors!
 
 ### Environment Variables for OAuth
 

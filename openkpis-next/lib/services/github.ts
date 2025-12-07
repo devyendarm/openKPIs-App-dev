@@ -8,7 +8,14 @@ import { createAppAuth } from '@octokit/auth-app';
 
 // Note: Content PRs go to GITHUB_CONTENT_REPO_NAME repository (not the app repo)
 const GITHUB_OWNER = process.env.GITHUB_REPO_OWNER || 'devyendarm';
-const GITHUB_CONTENT_REPO = process.env.GITHUB_CONTENT_REPO_NAME || process.env.GITHUB_CONTENT_REPO || 'openKPIs-Content';
+// Handle both formats: "repo-name" or "owner/repo-name"
+let GITHUB_CONTENT_REPO = process.env.GITHUB_CONTENT_REPO_NAME || process.env.GITHUB_CONTENT_REPO || 'openKPIs-Content';
+// If repo includes owner (e.g., "devyendarm/OpenKPIs-Content-Dev"), extract just the repo name
+if (GITHUB_CONTENT_REPO.includes('/')) {
+  const parts = GITHUB_CONTENT_REPO.split('/');
+  GITHUB_CONTENT_REPO = parts[parts.length - 1]; // Get last part (repo name)
+  console.log(`[GitHub Config] Extracted repo name from "${process.env.GITHUB_CONTENT_REPO}" → "${GITHUB_CONTENT_REPO}"`);
+}
 
 interface EntityRecord {
   id?: string;
@@ -212,6 +219,7 @@ async function commitWithUserToken(
   const branchName = `${params.action}-${params.tableName}-${params.record.slug}-${Date.now()}`;
 
   // Verify repository access before attempting operations
+  console.log(`[GitHub Sync] Attempting to access repository: ${GITHUB_OWNER}/${GITHUB_CONTENT_REPO}`);
   try {
     await octokit.repos.get({
       owner: GITHUB_OWNER,
