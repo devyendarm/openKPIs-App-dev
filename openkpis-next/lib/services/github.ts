@@ -235,8 +235,9 @@ async function commitWithUserToken(
   file_path?: string;
   error?: string;
 }> {
-  console.log('[GitHub Sync] Using user token for commit - commits will count toward contributions');
-  const octokit = new Octokit({ auth: userToken });
+  console.log('[GitHub Sync] Using GitHub App with user attribution - commits will count toward contributions');
+  // Note: userToken is passed but not used for operations - we use App for all operations
+  // User token is only needed to get user info (email) for attribution, which is already in params.userEmail
   
   // Validate required parameters
   if (!params.userLogin) {
@@ -244,13 +245,6 @@ async function commitWithUserToken(
   }
   if (!params.record.name) {
     throw new Error('record.name is required for GitHub sync');
-  }
-  
-  // Verify user has repo access
-  try {
-    await octokit.users.getAuthenticated();
-  } catch (error) {
-    throw new Error('User token does not have repository access');
   }
 
   // Generate YAML content - validate it's not empty
@@ -265,28 +259,15 @@ async function commitWithUserToken(
   const branchIdentifier = params.record.slug || params.record.name || params.record.id || 'untitled';
   const branchName = `${params.action}-${params.tableName}-${branchIdentifier}-${Date.now()}`;
 
-  // Verify repository access before attempting operations
-  console.log(`[GitHub Sync] Attempting to access repository: ${GITHUB_OWNER}/${GITHUB_CONTENT_REPO}`);
-  try {
-    await octokit.repos.get({
-      owner: GITHUB_OWNER,
-      repo: GITHUB_CONTENT_REPO,
-    });
-    console.log(`[GitHub Sync] Verified access to repository: ${GITHUB_OWNER}/${GITHUB_CONTENT_REPO}`);
-  } catch (error) {
-    const err = error as { status?: number; message?: string };
-    if (err.status === 404) {
-      throw new Error(`Repository not found or no access: ${GITHUB_OWNER}/${GITHUB_CONTENT_REPO}. User token may not have 'repo' scope or repository access.`);
-    }
-    throw new Error(`Failed to verify repository access: ${err.message || 'Unknown error'}`);
-  }
-
   // GITHUB-SUPPORTED APPROACH FOR ORGANIZATION REPOSITORIES:
   // In org repos, users with 'repo' scope CANNOT create branches unless they are collaborators.
   // The GitHub-supported solution is:
   // 1. Use GitHub App to create branch AND commit (has org write access)
   // 2. Set author/committer to USER (not App) - GitHub counts this as user contribution
   // 3. GitHub counts contributions based on author email matching user's verified email
+  // Note: We skip user token repo verification because:
+  // - User token is only used to get user info (email) for attribution, not for operations
+  // - Verifying with user token would fail in org repos and prevent us from using the App approach
   
   const appId = process.env.GITHUB_APP_ID;
   const installationIdStr = process.env.GITHUB_INSTALLATION_ID;
