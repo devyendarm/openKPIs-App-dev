@@ -366,6 +366,36 @@ async function commitWithUserToken(
     }
   }
 
+  // CRITICAL: Verify branch is accessible from user token perspective
+  // Sometimes there's a delay between App creating branch and user token seeing it
+  let branchAccessible = false;
+  let retries = 3;
+  while (!branchAccessible && retries > 0) {
+    try {
+      await octokit.repos.getBranch({
+        owner: GITHUB_OWNER,
+        repo: GITHUB_CONTENT_REPO,
+        branch: branchName,
+      });
+      branchAccessible = true;
+      console.log(`[GitHub Sync] Branch ${branchName} is accessible from user token`);
+    } catch (branchError) {
+      const branchErr = branchError as { status?: number; message?: string };
+      if (branchErr.status === 404) {
+        retries--;
+        if (retries > 0) {
+          console.log(`[GitHub Sync] Branch not yet visible to user token, retrying... (${retries} attempts left)`);
+          // Wait 500ms before retry (branch propagation delay)
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } else {
+          throw new Error(`Branch ${branchName} created by App but not accessible to user token. User may not have 'repo' scope or repository access.`);
+        }
+      } else {
+        throw new Error(`Failed to verify branch access: ${branchErr.message || 'Unknown error'}`);
+      }
+    }
+  }
+
   // Check if file exists
   let existingFileSha: string | undefined;
   try {
@@ -415,9 +445,28 @@ async function commitWithUserToken(
     console.log('[GitHub Sync] Commit created using user token - will count toward contributions');
   } catch (commitError) {
     const err = commitError as { status?: number; message?: string };
-    console.error('[GitHub Sync] Commit failed after branch creation:', err);
+    console.error('[GitHub Sync] Commit failed after branch creation:', {
+      status: err.status,
+      message: err.message,
+      branch: branchName,
+      owner: GITHUB_OWNER,
+      repo: GITHUB_CONTENT_REPO,
+      path: filePath,
+    });
     
     // Branch was created but commit failed
+    // This usually means user token doesn't have write access to the branch
+    if (err.status === 404) {
+      throw new Error(
+        `Branch created but user token cannot write to it (404). ` +
+        `This usually means:\n` +
+        `1. User token doesn't have 'repo' scope - please sign out and sign back in\n` +
+        `2. User is not a collaborator on the repository\n` +
+        `3. Repository is private and user doesn't have access\n` +
+        `Branch: ${branchName}, Repository: ${GITHUB_OWNER}/${GITHUB_CONTENT_REPO}`
+      );
+    }
+    
     // Note: We don't delete the branch here as it might be useful for debugging
     // The branch will remain orphaned, but this is acceptable for error tracking
     throw new Error(`Branch created but commit failed: ${err.message || 'Unknown error'}. Branch: ${branchName}`);
