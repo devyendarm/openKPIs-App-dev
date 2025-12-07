@@ -3,7 +3,7 @@
 ## ✅ Cookie is Set (Confirmed)
 
 From your cookies, I can see:
-- **`openkpis_github_token`**: `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` ✅
+- **`openkpis_github_token`**: `gho_XXXXXXXXXXXXX` (example token) ✅
 - **Expires**: `2025-12-14T05:32:52.030Z` (7 days from now) ✅
 - **Domain**: `dev.openkpis.org` ✅
 - **HttpOnly**: Yes ✅

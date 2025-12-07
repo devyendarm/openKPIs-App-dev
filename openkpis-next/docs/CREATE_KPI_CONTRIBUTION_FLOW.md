@@ -16,7 +16,7 @@ syncToGitHub({ userId: "..." }) called
 getUserOAuthTokenWithRefresh(userId)
   ↓
 PRIORITY 1: Check cookie
-  ✅ openkpis_github_token = "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"
+  ✅ openkpis_github_token = "gho_XXXXXXXXXXXXX" (example token)
   ↓
 Token found! ✅
   ↓
