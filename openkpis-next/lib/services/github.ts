@@ -281,8 +281,13 @@ async function commitWithUserToken(
     throw new Error(`Failed to verify repository access: ${err.message || 'Unknown error'}`);
   }
 
-  // HYBRID APPROACH: Use GitHub App to create branch (has org access)
-  // Then use user token for commit (counts toward contributions)
+  // GITHUB-SUPPORTED APPROACH FOR ORGANIZATION REPOSITORIES:
+  // In org repos, users with 'repo' scope CANNOT create branches unless they are collaborators.
+  // The GitHub-supported solution is:
+  // 1. Use GitHub App to create branch AND commit (has org write access)
+  // 2. Set author/committer to USER (not App) - GitHub counts this as user contribution
+  // 3. GitHub counts contributions based on author email matching user's verified email
+  
   const appId = process.env.GITHUB_APP_ID;
   const installationIdStr = process.env.GITHUB_INSTALLATION_ID;
   const b64Key = process.env.GITHUB_APP_PRIVATE_KEY_B64;
@@ -291,7 +296,7 @@ async function commitWithUserToken(
     throw new Error('GitHub App credentials not configured. Cannot create branch in organization repository.');
   }
 
-  // Create GitHub App client for branch operations
+  // Create GitHub App client
   let privateKey: string;
   try {
     const key = Buffer.from(b64Key.trim(), 'base64').toString('utf8');
@@ -346,7 +351,7 @@ async function commitWithUserToken(
     throw new Error(`Failed to get main branch: ${err.message || 'Unknown error'}`);
   }
 
-  // Create branch using App (has org access)
+  // Create branch using App (has org write access)
   try {
     await appOctokit.git.createRef({
       owner: GITHUB_OWNER,
@@ -359,47 +364,16 @@ async function commitWithUserToken(
     const err = error as { status?: number; message?: string };
     // Check if branch already exists (422 error)
     if (err.status === 422 || err.message?.includes('already exists')) {
-      // Branch might already exist from a previous failed attempt - try to continue
       console.warn(`[GitHub Sync] Branch ${branchName} already exists, continuing with commit`);
     } else {
       throw new Error(`Failed to create branch: ${err.message || 'Unknown error'}`);
     }
   }
 
-  // CRITICAL: Verify branch is accessible from user token perspective
-  // Sometimes there's a delay between App creating branch and user token seeing it
-  let branchAccessible = false;
-  let retries = 3;
-  while (!branchAccessible && retries > 0) {
-    try {
-      await octokit.repos.getBranch({
-        owner: GITHUB_OWNER,
-        repo: GITHUB_CONTENT_REPO,
-        branch: branchName,
-      });
-      branchAccessible = true;
-      console.log(`[GitHub Sync] Branch ${branchName} is accessible from user token`);
-    } catch (branchError) {
-      const branchErr = branchError as { status?: number; message?: string };
-      if (branchErr.status === 404) {
-        retries--;
-        if (retries > 0) {
-          console.log(`[GitHub Sync] Branch not yet visible to user token, retrying... (${retries} attempts left)`);
-          // Wait 500ms before retry (branch propagation delay)
-          await new Promise(resolve => setTimeout(resolve, 500));
-        } else {
-          throw new Error(`Branch ${branchName} created by App but not accessible to user token. User may not have 'repo' scope or repository access.`);
-        }
-      } else {
-        throw new Error(`Failed to verify branch access: ${branchErr.message || 'Unknown error'}`);
-      }
-    }
-  }
-
-  // Check if file exists
+  // Check if file exists (using App)
   let existingFileSha: string | undefined;
   try {
-    const { data: existingFile } = await octokit.repos.getContent({
+    const { data: existingFile } = await appOctokit.repos.getContent({
       owner: GITHUB_OWNER,
       repo: GITHUB_CONTENT_REPO,
       path: filePath,
@@ -412,15 +386,15 @@ async function commitWithUserToken(
     // File doesn't exist – continue
   }
 
-  // USER TOKEN APPROACH: Use user token to commit (for contributions)
-  // This ensures commits count toward user's GitHub contributions
+  // CRITICAL: Use App to commit BUT set author/committer to USER
+  // This is the GitHub-supported approach for user contributions in org repos
+  // GitHub counts contributions based on author email matching user's verified email
   const authorName = params.userName || params.userLogin || 'Unknown User';
   const authorEmail = params.userEmail || `${params.userLogin || 'unknown'}@users.noreply.github.com`;
   
-  // Use USER TOKEN to commit (not App) - this is critical for contributions
   let commitData;
   try {
-    const commitResponse = await octokit.repos.createOrUpdateFileContents({
+    const commitResponse = await appOctokit.repos.createOrUpdateFileContents({
       owner: GITHUB_OWNER,
       repo: GITHUB_CONTENT_REPO,
       path: filePath,
@@ -430,7 +404,8 @@ async function commitWithUserToken(
       content: Buffer.from(yamlContent).toString('base64'),
       branch: branchName,
       sha: existingFileSha,
-      // Both author AND committer are the user - this makes it count toward contributions
+      // CRITICAL: Set author/committer to USER (not App)
+      // GitHub counts contributions when author email matches user's verified GitHub email
       author: {
         name: authorName,
         email: authorEmail,
@@ -441,7 +416,7 @@ async function commitWithUserToken(
       },
     });
     commitData = commitResponse.data;
-    console.log('[GitHub Sync] Commit created using USER TOKEN - will count toward contributions');
+    console.log('[GitHub Sync] Commit created using GitHub App with USER attribution - will count toward contributions if email matches verified GitHub email');
   } catch (commitError) {
     const err = commitError as { status?: number; message?: string };
     console.error('[GitHub Sync] Commit failed after branch creation:', {
@@ -453,7 +428,6 @@ async function commitWithUserToken(
       path: filePath,
     });
     
-    // Branch was created but commit failed
     throw new Error(`Branch created but commit failed: ${err.message || 'Unknown error'}. Branch: ${branchName}`);
   }
 
@@ -469,11 +443,11 @@ async function commitWithUserToken(
     throw new Error('Invalid commit response from GitHub');
   }
 
-  // Create PR - user token with 'repo' scope CAN create PRs in public repos
+  // Create PR using App (has org access)
   // Wrap in try-catch to handle PR creation failures gracefully
   let prData;
   try {
-    const prResponse = await octokit.pulls.create({
+    const prResponse = await appOctokit.pulls.create({
       owner: GITHUB_OWNER,
       repo: GITHUB_CONTENT_REPO,
       title: params.action === 'created'
@@ -485,7 +459,7 @@ async function commitWithUserToken(
       maintainer_can_modify: true,
     });
     prData = prResponse.data;
-    console.log('[GitHub Sync] PR created using user token');
+    console.log('[GitHub Sync] PR created using GitHub App');
   } catch (prError) {
     const err = prError as { status?: number; message?: string };
     console.error('[GitHub Sync] PR creation failed after successful commit:', err);
