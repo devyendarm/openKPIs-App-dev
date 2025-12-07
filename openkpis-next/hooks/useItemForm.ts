@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import type { EntityKind } from '@/src/types/entities';
@@ -38,6 +38,10 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
   const { user, loading: authLoading } = useAuth();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [useForkPR, setUseForkPR] = useState(false);
+  const [forkPreferenceEnabled, setForkPreferenceEnabled] = useState<boolean | null>(null);
+  const [showForkModal, setShowForkModal] = useState(false);
+  const [forkPreferenceLoading, setForkPreferenceLoading] = useState(true);
 
   const [formData, setFormData] = useState<BaseItemFormData>({
     name: initial?.name || '',
@@ -55,6 +59,81 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
     () => generateSlug(formData.slug || formData.name),
     [formData.slug, formData.name]
   );
+
+  // Load user's GitHub fork preference
+  useEffect(() => {
+    if (!user) {
+      setForkPreferenceLoading(false);
+      return;
+    }
+
+    async function loadPreference() {
+      try {
+        const response = await fetch('/api/user/settings/github-contributions', {
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setForkPreferenceEnabled(data.enabled === true);
+          // If preference is enabled, default to using fork+PR
+          if (data.enabled === true) {
+            setUseForkPR(true);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load GitHub fork preference:', error);
+      } finally {
+        setForkPreferenceLoading(false);
+      }
+    }
+
+    loadPreference();
+  }, [user]);
+
+  // Handle fork+PR option click
+  const handleForkPROptionClick = useCallback(() => {
+    // If preference is not enabled, show modal
+    if (forkPreferenceEnabled === false || forkPreferenceEnabled === null) {
+      setShowForkModal(true);
+    } else {
+      // Preference already enabled, just toggle the option
+      setUseForkPR(true);
+    }
+  }, [forkPreferenceEnabled]);
+
+  // Handle modal confirm
+  const handleForkModalConfirm = useCallback(async (dontShowAgain: boolean) => {
+    try {
+      const response = await fetch('/api/user/settings/github-contributions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ enabled: true }),
+      });
+
+      if (response.ok) {
+        setForkPreferenceEnabled(true);
+        setUseForkPR(true);
+        setShowForkModal(false);
+        
+        // Store "don't show again" in localStorage if requested
+        if (dontShowAgain) {
+          localStorage.setItem('openkpis_fork_modal_dismissed', 'true');
+        }
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Failed to enable GitHub contributions');
+      }
+    } catch (error) {
+      console.error('Failed to enable GitHub fork contributions:', error);
+      setError('Failed to enable GitHub contributions. Please try again.');
+    }
+  }, []);
+
+  // Note: Modal dismissal is handled in handleForkModalConfirm
+  // This effect is intentionally empty - modal is only shown on explicit user action
 
   const setField = useCallback(<K extends keyof BaseItemFormData>(key: K, value: BaseItemFormData[K]) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -97,6 +176,8 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
       // 1. Item creation
       // 2. Contribution record creation
       // 3. GitHub sync
+      // Note: The backend will check user preference and use fork+PR if enabled
+      // We don't need to pass a flag here - backend handles it automatically
       const response = await fetch('/api/items/create', {
         method: 'POST',
         headers: {
@@ -166,5 +247,14 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
     handleNameChange,
     handleSlugChange,
     handleSubmit,
+    // Fork+PR related
+    useForkPR,
+    setUseForkPR,
+    forkPreferenceEnabled,
+    forkPreferenceLoading,
+    showForkModal,
+    setShowForkModal,
+    handleForkPROptionClick,
+    handleForkModalConfirm,
   };
 }

@@ -11,10 +11,27 @@ import Select from '@/components/forms/Select';
 import TagsInput from '@/components/forms/TagsInput';
 import SlugInput from '@/components/forms/SlugInput';
 import SubmitBar from '@/components/forms/SubmitBar';
+import GitHubForkModal from '@/components/forms/GitHubForkModal';
 import { useItemForm } from '@/hooks/useItemForm';
 
 export default function NewEventPage() {
-  const { user, saving, error, formData, setField, handleNameChange, handleSlugChange, handleSubmit } = useItemForm({
+  const {
+    user,
+    saving,
+    error,
+    formData,
+    setField,
+    handleNameChange,
+    handleSlugChange,
+    handleSubmit,
+    useForkPR,
+    forkPreferenceEnabled,
+    forkPreferenceLoading,
+    showForkModal,
+    setShowForkModal,
+    handleForkPROptionClick,
+    handleForkModalConfirm,
+  } = useItemForm({
     type: 'event',
     afterCreateRedirect: ({ slug }) => `/events/${slug}/edit`,
   });
@@ -122,8 +139,23 @@ export default function NewEventPage() {
           <TagsInput value={formData.tags} onChange={(v) => setField('tags', v)} />
         </FormField>
 
-        <SubmitBar submitting={saving} submitLabel="Create Event" cancelHref="/events" />
+        <SubmitBar 
+          submitting={saving} 
+          submitLabel="Quick Create" 
+          cancelHref="/events"
+          useForkPR={useForkPR}
+          forkPreferenceEnabled={forkPreferenceEnabled}
+          forkPreferenceLoading={forkPreferenceLoading}
+          onForkPROptionClick={handleForkPROptionClick}
+        />
       </form>
+
+      <GitHubForkModal
+        isOpen={showForkModal}
+        onClose={() => setShowForkModal(false)}
+        onConfirm={() => handleForkModalConfirm(false)}
+        onDontShowAgain={() => handleForkModalConfirm(true)}
+      />
     </main>
   );
 }

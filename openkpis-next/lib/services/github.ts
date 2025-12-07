@@ -47,6 +47,8 @@ interface EntityRecord {
   last_modified_at?: string;
 }
 
+export type GitHubContributionMode = 'internal_app' | 'fork_pr' | 'editor_direct';
+
 export interface GitHubSyncParams {
   tableName: 'kpis' | 'events' | 'dimensions' | 'metrics' | 'dashboards';
   record: EntityRecord;
@@ -57,6 +59,7 @@ export interface GitHubSyncParams {
   contributorName?: string; // Original contributor (created_by)
   editorName?: string | null; // Editor who made the edit (last_modified_by)
   userId?: string; // User ID for token retrieval
+  mode?: GitHubContributionMode; // Optional: override mode selection
 }
 
 /**
@@ -235,14 +238,7 @@ async function commitWithUserToken(
   file_path?: string;
   error?: string;
 }> {
-  // Check if draft folder approach is enabled
-  const USE_DRAFT_FOLDER = process.env.GITHUB_USE_DRAFT_FOLDER === 'true';
-  
-  if (USE_DRAFT_FOLDER) {
-    console.log('[GitHub Sync] Draft folder approach enabled - committing directly to main branch using GitHub App');
-  } else {
-    console.log('[GitHub Sync] Using GitHub App with user attribution - commits will count toward contributions');
-  }
+  console.log('[GitHub Sync] Using GitHub App with user attribution - commits will count toward contributions');
   // Note: userToken is passed but not used for operations - we use App for all operations
   // User token is only needed to get user info (email) for attribution, which is already in params.userEmail
   
@@ -261,20 +257,10 @@ async function commitWithUserToken(
   }
   
   const fileName = `${params.record.slug || params.record.name || params.record.id || 'untitled'}.yml`;
-  
-  // Check if draft folder approach is enabled
-  const USE_DRAFT_FOLDER = process.env.GITHUB_USE_DRAFT_FOLDER === 'true';
-  
-  // Determine file path and branch based on approach
-  const filePath = USE_DRAFT_FOLDER
-    ? `data-layer-draft/${params.tableName}/${fileName}`  // Draft folder approach
-    : `data-layer/${params.tableName}/${fileName}`;        // Regular approach
-  
+  const filePath = `data-layer/${params.tableName}/${fileName}`;
   // Use slug, name, or id for branch name - ensure at least one exists
   const branchIdentifier = params.record.slug || params.record.name || params.record.id || 'untitled';
-  const branchName = USE_DRAFT_FOLDER
-    ? 'main'  // Draft folder: commit directly to main
-    : `${params.action}-${params.tableName}-${branchIdentifier}-${Date.now()}`;  // Regular: feature branch
+  const branchName = `${params.action}-${params.tableName}-${branchIdentifier}-${Date.now()}`;
 
   // GITHUB-SUPPORTED APPROACH FOR ORGANIZATION REPOSITORIES:
   // In org repos, users with 'repo' scope CANNOT create branches unless they are collaborators.
@@ -349,28 +335,23 @@ async function commitWithUserToken(
     throw new Error(`Failed to get main branch: ${err.message || 'Unknown error'}`);
   }
 
-  // Create branch only if NOT using draft folder approach
-  if (!USE_DRAFT_FOLDER) {
-    // Create branch using App (has org write access)
-    try {
-      await appOctokit.git.createRef({
-        owner: GITHUB_OWNER,
-        repo: GITHUB_CONTENT_REPO,
-        ref: `refs/heads/${branchName}`,
-        sha: mainRef.object.sha,
-      });
-      console.log(`[GitHub Sync] Branch created using GitHub App: ${branchName}`);
-    } catch (error) {
-      const err = error as { status?: number; message?: string };
-      // Check if branch already exists (422 error)
-      if (err.status === 422 || err.message?.includes('already exists')) {
-        console.warn(`[GitHub Sync] Branch ${branchName} already exists, continuing with commit`);
-      } else {
-        throw new Error(`Failed to create branch: ${err.message || 'Unknown error'}`);
-      }
+  // Create branch using App (has org write access)
+  try {
+    await appOctokit.git.createRef({
+      owner: GITHUB_OWNER,
+      repo: GITHUB_CONTENT_REPO,
+      ref: `refs/heads/${branchName}`,
+      sha: mainRef.object.sha,
+    });
+    console.log(`[GitHub Sync] Branch created using GitHub App: ${branchName}`);
+  } catch (error) {
+    const err = error as { status?: number; message?: string };
+    // Check if branch already exists (422 error)
+    if (err.status === 422 || err.message?.includes('already exists')) {
+      console.warn(`[GitHub Sync] Branch ${branchName} already exists, continuing with commit`);
+    } else {
+      throw new Error(`Failed to create branch: ${err.message || 'Unknown error'}`);
     }
-  } else {
-    console.log(`[GitHub Sync] Draft folder approach - committing directly to main branch`);
   }
 
   // Check if file exists (using App)
@@ -422,13 +403,9 @@ async function commitWithUserToken(
       owner: GITHUB_OWNER,
       repo: GITHUB_CONTENT_REPO,
       path: filePath,
-      message: USE_DRAFT_FOLDER
-        ? (params.action === 'created'
-            ? `Add draft ${params.tableName.slice(0, -1)}: ${params.record.name}`
-            : `Update draft ${params.tableName.slice(0, -1)}: ${params.record.name}`)
-        : (params.action === 'created'
-            ? `Add ${params.tableName.slice(0, -1)}: ${params.record.name}`
-            : `Update ${params.tableName.slice(0, -1)}: ${params.record.name}`),
+      message: params.action === 'created'
+        ? `Add ${params.tableName.slice(0, -1)}: ${params.record.name}`
+        : `Update ${params.tableName.slice(0, -1)}: ${params.record.name}`,
       content: Buffer.from(yamlContent).toString('base64'),
       branch: branchName,
       sha: existingFileSha,
@@ -456,10 +433,7 @@ async function commitWithUserToken(
       path: filePath,
     });
     
-    const errorMsg = USE_DRAFT_FOLDER
-      ? `Commit to main branch failed: ${err.message || 'Unknown error'}`
-      : `Branch created but commit failed: ${err.message || 'Unknown error'}. Branch: ${branchName}`;
-    throw new Error(errorMsg);
+    throw new Error(`Branch created but commit failed: ${err.message || 'Unknown error'}. Branch: ${branchName}`);
   }
 
   // Build PR body
@@ -528,21 +502,315 @@ async function commitWithUserToken(
         // No pr_number or pr_url since PR creation failed
       };
     }
-  } else {
-    // Draft folder approach - no PR needed, commit is already on main
-    console.log('[GitHub Sync] Draft folder approach - commit on main, no PR created');
-    return {
-      success: true,
-      commit_sha: commitData.commit.sha,
-      branch: branchName,
-      file_path: filePath,
-      // No pr_number or pr_url for draft folder approach
-    };
-  }
 }
 
 // Bot commit function removed - user token covers 100% of contribution requirements
 // If user token is unavailable, we require re-auth instead of silently using bot
+
+/**
+ * Get user's contribution mode preference
+ * Returns 'fork_pr' if user has enabled GitHub fork contributions, else 'internal_app'
+ */
+async function getUserContributionMode(userId: string): Promise<GitHubContributionMode> {
+  // Check if fork mode is enabled via feature flag
+  const forkModeEnabled = process.env.GITHUB_FORK_MODE_ENABLED === 'true';
+  if (!forkModeEnabled) {
+    return 'internal_app';
+  }
+
+  try {
+    const { createAdminClient } = await import('@/lib/supabase/server');
+    const { withTablePrefix } = await import('@/src/types/entities');
+    const admin = createAdminClient();
+    
+    const { data: profile } = await admin
+      .from(withTablePrefix('user_profiles'))
+      .select('enable_github_fork_contributions')
+      .eq('id', userId)
+      .maybeSingle();
+    
+    if (profile?.enable_github_fork_contributions === true) {
+      return 'fork_pr';
+    }
+    
+    return 'internal_app';
+  } catch (error) {
+    console.warn('[GitHub Sync] Failed to check user contribution mode, defaulting to internal_app:', error);
+    return 'internal_app';
+  }
+}
+
+/**
+ * Sync via Fork + PR workflow
+ * Creates/ensures fork exists, commits to fork, opens PR to org repo
+ */
+async function syncViaForkAndPR(
+  userToken: string,
+  params: GitHubSyncParams
+): Promise<{
+  success: boolean;
+  commit_sha?: string;
+  pr_number?: number;
+  pr_url?: string;
+  branch?: string;
+  file_path?: string;
+  error?: string;
+  requiresReauth?: boolean;
+}> {
+  console.log('[GitHub Fork PR] Starting fork+PR workflow for user:', params.userLogin);
+  
+  // Validate required parameters
+  if (!params.userLogin || params.userLogin === 'unknown') {
+    throw new Error('Valid userLogin is required for fork+PR workflow');
+  }
+  if (!params.record.name) {
+    throw new Error('record.name is required for GitHub sync');
+  }
+  if (!params.userEmail) {
+    throw new Error('userEmail (verified GitHub email) is required for fork+PR workflow');
+  }
+
+  // Generate YAML content
+  const yamlContent = generateYAML(params.tableName, params.record);
+  if (!yamlContent || yamlContent.trim().length === 0) {
+    throw new Error(`Failed to generate YAML content for ${params.tableName}. Invalid table name or record data.`);
+  }
+
+  const fileName = `${params.record.slug || params.record.name || params.record.id || 'untitled'}.yml`;
+  const filePath = `data-layer/${params.tableName}/${fileName}`;
+  const branchIdentifier = params.record.slug || params.record.name || params.record.id || 'untitled';
+  const branchName = `openkpis-${params.action}-${params.tableName}-${branchIdentifier}-${Date.now()}`;
+
+  // Create user Octokit instance
+  const userOctokit = new Octokit({ auth: userToken });
+
+  // Step 1: Ensure fork exists
+  const forkOwner = params.userLogin;
+  const forkRepo = GITHUB_CONTENT_REPO;
+  
+  console.log('[GitHub Fork PR] Checking if fork exists:', `${forkOwner}/${forkRepo}`);
+  
+  let forkExists = false;
+  try {
+    const { status } = await userOctokit.repos.get({
+      owner: forkOwner,
+      repo: forkRepo,
+    });
+    forkExists = (status === 200);
+  } catch (error) {
+    const err = error as { status?: number };
+    if (err.status === 404) {
+      forkExists = false;
+    } else {
+      throw new Error(`Failed to check fork existence: ${err.status || 'Unknown error'}`);
+    }
+  }
+
+  if (!forkExists) {
+    console.log('[GitHub Fork PR] Fork does not exist, creating fork...');
+    try {
+      // Create fork (this is async on GitHub's side)
+      await userOctokit.repos.createFork({
+        owner: GITHUB_OWNER,
+        repo: GITHUB_CONTENT_REPO,
+      });
+      console.log('[GitHub Fork PR] Fork creation initiated, polling for completion...');
+      
+      // Poll for fork to be ready (max 10 seconds, 500ms intervals)
+      const maxAttempts = 20;
+      const pollInterval = 500;
+      let attempts = 0;
+      
+      while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        attempts++;
+        
+        try {
+          const { status } = await userOctokit.repos.get({
+            owner: forkOwner,
+            repo: forkRepo,
+          });
+          if (status === 200) {
+            forkExists = true;
+            console.log('[GitHub Fork PR] Fork is ready after', attempts * pollInterval, 'ms');
+            break;
+          }
+        } catch (pollError) {
+          // Fork not ready yet, continue polling
+        }
+      }
+      
+      if (!forkExists) {
+        throw new Error('Fork creation is taking longer than expected. Please try again in a few seconds.');
+      }
+    } catch (error) {
+      const err = error as { status?: number; message?: string };
+      if (err.status === 422 && err.message?.includes('already exists')) {
+        // Fork already exists (race condition)
+        forkExists = true;
+        console.log('[GitHub Fork PR] Fork already exists (race condition)');
+      } else {
+        throw new Error(`Failed to create fork: ${err.message || 'Unknown error'}. Please try again later.`);
+      }
+    }
+  } else {
+    console.log('[GitHub Fork PR] Fork already exists');
+  }
+
+  // Step 2: Get base SHA from upstream main branch
+  // Use App token to read org repo (more reliable)
+  const appId = process.env.GITHUB_APP_ID;
+  const installationIdStr = process.env.GITHUB_INSTALLATION_ID;
+  const b64Key = process.env.GITHUB_APP_PRIVATE_KEY_B64;
+  
+  if (!appId || !installationIdStr || !b64Key) {
+    throw new Error('GitHub App credentials not configured');
+  }
+
+  let privateKey: string;
+  try {
+    const key = Buffer.from(b64Key.trim(), 'base64').toString('utf8');
+    if (key.includes('BEGIN') && key.includes('END')) {
+      privateKey = key.replace(/\r\n/g, '\n');
+    } else {
+      throw new Error('Invalid private key format');
+    }
+  } catch (error) {
+    throw new Error('Failed to decode GitHub App private key');
+  }
+
+  const appIdNum = Number(appId);
+  const installationIdNum = parseInt(installationIdStr, 10);
+  
+  if (isNaN(appIdNum) || appIdNum <= 0 || isNaN(installationIdNum) || installationIdNum <= 0) {
+    throw new Error('Invalid GitHub App credentials');
+  }
+
+  const appOctokit = new Octokit({
+    authStrategy: createAppAuth,
+    auth: {
+      appId: appIdNum,
+      privateKey,
+      installationId: installationIdNum,
+    },
+  });
+
+  // Get main branch SHA from org repo
+  let mainSha: string;
+  try {
+    const { data: mainRef } = await appOctokit.git.getRef({
+      owner: GITHUB_OWNER,
+      repo: GITHUB_CONTENT_REPO,
+      ref: 'heads/main',
+    });
+    if (!mainRef?.object?.sha) {
+      throw new Error('Invalid main branch structure');
+    }
+    mainSha = mainRef.object.sha;
+    console.log('[GitHub Fork PR] Got main branch SHA:', mainSha);
+  } catch (error) {
+    const err = error as { status?: number; message?: string };
+    throw new Error(`Failed to get main branch SHA: ${err.message || 'Unknown error'}`);
+  }
+
+  // Step 3: Create branch in fork
+  try {
+    await userOctokit.git.createRef({
+      owner: forkOwner,
+      repo: forkRepo,
+      ref: `refs/heads/${branchName}`,
+      sha: mainSha,
+    });
+    console.log('[GitHub Fork PR] Branch created in fork:', branchName);
+  } catch (error) {
+    const err = error as { status?: number; message?: string };
+    if (err.status === 422 && err.message?.includes('already exists')) {
+      console.warn('[GitHub Fork PR] Branch already exists, continuing...');
+    } else {
+      throw new Error(`Failed to create branch in fork: ${err.message || 'Unknown error'}`);
+    }
+  }
+
+  // Step 4: Commit file to fork branch
+  let commitSha: string;
+  try {
+    const commitResponse = await userOctokit.repos.createOrUpdateFileContents({
+      owner: forkOwner,
+      repo: forkRepo,
+      path: filePath,
+      message: params.action === 'created'
+        ? `Add ${params.tableName.slice(0, -1)}: ${params.record.name}`
+        : `Update ${params.tableName.slice(0, -1)}: ${params.record.name}`,
+      content: Buffer.from(yamlContent).toString('base64'),
+      branch: branchName,
+      author: {
+        name: params.userName || params.userLogin,
+        email: params.userEmail,
+      },
+      committer: {
+        name: params.userName || params.userLogin,
+        email: params.userEmail,
+      },
+    });
+    
+    if (!commitResponse.data.commit?.sha) {
+      throw new Error('Invalid commit response');
+    }
+    commitSha = commitResponse.data.commit.sha;
+    console.log('[GitHub Fork PR] File committed to fork:', commitSha);
+  } catch (error) {
+    const err = error as { status?: number; message?: string };
+    throw new Error(`Failed to commit file to fork: ${err.message || 'Unknown error'}`);
+  }
+
+  // Step 5: Open PR from fork to org repo
+  const prBody = `**Contributed by**: @${params.contributorName || params.userLogin}\n` +
+    (params.action === 'edited' && params.editorName && params.editorName !== params.contributorName
+      ? `**Edited by**: @${params.editorName}\n`
+      : '') +
+    `\n**Action**: ${params.action}\n**Type**: ${params.tableName}\n\n---\n\n${params.record.description || 'No description provided.'}`;
+
+  try {
+    const prResponse = await userOctokit.pulls.create({
+      owner: GITHUB_OWNER,
+      repo: GITHUB_CONTENT_REPO,
+      title: params.action === 'created'
+        ? `Add ${params.tableName.slice(0, -1)}: ${params.record.name}`
+        : `Update ${params.tableName.slice(0, -1)}: ${params.record.name}`,
+      head: `${forkOwner}:${branchName}`,
+      base: 'main',
+      body: prBody,
+      maintainer_can_modify: true,
+    });
+
+    if (!prResponse.data.number || !prResponse.data.html_url) {
+      throw new Error('Invalid PR response');
+    }
+
+    console.log('[GitHub Fork PR] PR created successfully:', prResponse.data.html_url);
+    
+    return {
+      success: true,
+      commit_sha: commitSha,
+      pr_number: prResponse.data.number,
+      pr_url: prResponse.data.html_url,
+      branch: branchName,
+      file_path: filePath,
+    };
+  } catch (error) {
+    const err = error as { status?: number; message?: string };
+    console.error('[GitHub Fork PR] PR creation failed:', err);
+    
+    // Commit succeeded but PR failed - return partial success
+    return {
+      success: false,
+      error: `Commit created in fork, but PR creation failed: ${err.message || 'Unknown error'}. You can manually open a PR from ${forkOwner}:${branchName} to ${GITHUB_OWNER}:main`,
+      commit_sha: commitSha,
+      branch: branchName,
+      file_path: filePath,
+    };
+  }
+}
 
 export async function syncToGitHub(params: GitHubSyncParams): Promise<{
   success: boolean;
@@ -553,86 +821,92 @@ export async function syncToGitHub(params: GitHubSyncParams): Promise<{
   file_path?: string;
   error?: string;
   requiresReauth?: boolean;
+  mode?: GitHubContributionMode;
 }> {
   try {
-    // PRIORITY 1: Try user token (with silent refresh if logged in)
-    if (params.userId) {
-      console.log('[GitHub Sync] Attempting to get user token for userId:', params.userId);
+    // Determine contribution mode
+    let mode: GitHubContributionMode = params.mode || 'internal_app';
+    
+    if (!params.mode && params.userId) {
+      // Auto-detect mode based on user preference
+      mode = await getUserContributionMode(params.userId);
+      console.log('[GitHub Sync] Determined contribution mode:', mode);
+    }
+
+    // PRIORITY 1: Fork+PR mode (if enabled and user has token)
+    if (mode === 'fork_pr' && params.userId) {
+      console.log('[GitHub Sync] Using fork+PR mode for user contributions');
       const { token: userToken, requiresReauth, error: tokenError } = 
         await getUserOAuthTokenWithRefresh(params.userId);
       
-      console.log('[GitHub Sync] Token retrieval result:', {
-        hasToken: !!userToken,
-        requiresReauth,
-        error: tokenError,
-      });
-      
-      if (userToken) {
-        // Use user token - commits will count toward contributions
-        console.log('[GitHub Sync] User token found, attempting commit with user token');
+      if (userToken && params.userEmail) {
         try {
-          return await commitWithUserToken(userToken, params);
+          const result = await syncViaForkAndPR(userToken, params);
+          return { ...result, mode: 'fork_pr' };
         } catch (error) {
           const err = error as { message?: string; status?: number };
-          console.error('[GitHub Sync] User token commit failed:', error);
+          console.error('[GitHub Sync] Fork+PR failed, falling back to internal_app:', error);
           
-          // If 404 (repository not found/no access), require reauth
-          // This usually means token doesn't have 'repo' scope or user not a collaborator
-          if (err.status === 404 || err.message?.includes('not found') || err.message?.includes('no access')) {
-            console.warn('[GitHub Sync] Repository access denied (404) - user token may not have repo scope');
-            return {
-              success: false,
-              error: err.message || 'Repository access denied. Please sign in again and grant repository permissions.',
-              requiresReauth: true,
-            };
-          }
+          // Fallback to internal_app if fork+PR fails
+          // Don't block the operation - user still gets their KPI created
+          mode = 'internal_app';
+          // Continue to internal_app flow below
+        }
+      } else {
+        console.warn('[GitHub Sync] Fork+PR mode requested but token/email missing, falling back to internal_app');
+        mode = 'internal_app';
+      }
+    }
+
+    // PRIORITY 2: Internal App mode (default, current behavior)
+    if (mode === 'internal_app') {
+      console.log('[GitHub Sync] Using internal_app mode (GitHub App)');
+      
+      if (!params.userId) {
+        return {
+          success: false,
+          error: 'User authentication required. Please sign in with GitHub.',
+          requiresReauth: true,
+          mode: 'internal_app',
+        };
+      }
+      
+      // Use App-based commit (current behavior)
+      // This is handled by commitWithUserToken which uses App internally
+      const { token: userToken } = await getUserOAuthTokenWithRefresh(params.userId);
+      if (userToken) {
+        try {
+          const result = await commitWithUserToken(userToken, params);
+          return { ...result, mode: 'internal_app' };
+        } catch (error) {
+          const err = error as { message?: string; status?: number };
+          console.error('[GitHub Sync] Internal app commit failed:', error);
           
-          // For authentication/authorization errors, require reauth (don't fall back to bot)
-          if (err.status === 401 || err.status === 403 || err.message?.includes('Bad credentials') || err.message?.includes('token')) {
-            console.warn('[GitHub Sync] User token authentication failed - requiring reauth');
-            return {
-              success: false,
-              error: err.message || 'GitHub token invalid. Please sign in again.',
-              requiresReauth: true,
-            };
-          }
-          
-          // For other errors (network, rate limit, etc.), still require reauth instead of falling back to bot
-          // This ensures we don't silently use bot when user token should work
-          console.warn('[GitHub Sync] User token commit error (non-404) - requiring reauth instead of bot fallback');
+          // For internal_app, we can be more lenient - this is the fallback mode
           return {
             success: false,
-            error: err.message || 'Failed to create commit with user token. Please try again or sign in again.',
-            requiresReauth: true,
+            error: err.message || 'Failed to sync to GitHub. Item created but GitHub sync failed.',
+            mode: 'internal_app',
           };
         }
       }
       
-      // PRIORITY 2: User not logged in or token unavailable - require reauth
-      // NEVER fall back to bot if userId is provided - always require reauth
-      console.warn('[GitHub Sync] User token not available, requiresReauth=true:', tokenError);
+      // If no user token, we can't proceed
       return {
         success: false,
-        error: tokenError || 'GitHub authorization required. Please sign in again.',
+        error: 'GitHub authorization required. Please sign in with GitHub.',
         requiresReauth: true,
-      };
-    } else {
-      // No userId provided - require login
-      console.warn('[GitHub Sync] No userId provided');
-      return {
-        success: false,
-        error: 'User authentication required. Please sign in with GitHub.',
-        requiresReauth: true,
+        mode: 'internal_app',
       };
     }
     
-    // This code should never be reached now since we return early in all cases above
-    // But keeping as safety net (should not use bot if userId was provided)
-    console.error('[GitHub Sync] CRITICAL: Reached bot fallback when userId was provided - this should not happen!');
+    // Fallback: Should not reach here, but handle gracefully
+    console.error('[GitHub Sync] Unknown mode or missing userId');
     return {
       success: false,
-      error: 'Failed to use user token. Please sign in again.',
-      requiresReauth: true,
+      error: 'Invalid configuration. Please try again.',
+      requiresReauth: false,
+      mode: 'internal_app',
     };
     
   } catch (error: unknown) {

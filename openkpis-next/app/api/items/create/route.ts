@@ -212,6 +212,33 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Check user's contribution mode preference
+      let contributionMode: 'internal_app' | 'fork_pr' | undefined = undefined;
+      const forkModeEnabled = process.env.GITHUB_FORK_MODE_ENABLED === 'true';
+      
+      if (forkModeEnabled && userId) {
+        try {
+          const { data: profile } = await admin
+            .from(withTablePrefix('user_profiles'))
+            .select('enable_github_fork_contributions')
+            .eq('id', userId)
+            .maybeSingle();
+          
+          if (profile?.enable_github_fork_contributions === true) {
+            contributionMode = 'fork_pr';
+            console.log('[Create Item] User has enabled fork+PR mode');
+          } else {
+            contributionMode = 'internal_app';
+            console.log('[Create Item] Using default internal_app mode');
+          }
+        } catch (error) {
+          console.warn('[Create Item] Failed to check user contribution mode, defaulting to internal_app:', error);
+          contributionMode = 'internal_app';
+        }
+      } else {
+        contributionMode = 'internal_app';
+      }
+
       // Call syncToGitHub service directly instead of HTTP call
       // Type the record properly for syncToGitHub
       const recordForSync = {
@@ -231,10 +258,16 @@ export async function POST(request: NextRequest) {
         tableName: TABLE_MAP[type] as 'kpis' | 'events' | 'dimensions' | 'metrics' | 'dashboards',
         record: recordForSync,
         action: 'created',
-        userLogin: userName,
-        userName,
+        userLogin: user.user_metadata?.preferred_username as string || 
+                   user.user_metadata?.user_name as string || 
+                   userName || 'unknown',
+        userName: user.user_metadata?.full_name as string || userName,
         userEmail: authorEmail,
+        contributorName: user.user_metadata?.preferred_username as string || 
+                        user.user_metadata?.user_name as string || 
+                        userName || 'unknown',
         userId: userId, // Pass userId for token retrieval
+        mode: contributionMode, // Pass the determined contribution mode
       });
 
       if (syncResult.success) {

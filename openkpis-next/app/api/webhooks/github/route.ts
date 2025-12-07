@@ -97,18 +97,26 @@ async function processWebhook(payload: GitHubWebhookPayload) {
   }
 
   // Extract item info from PR branch name
-  // Branch format: {action}-{tableName}-{slug}-{timestamp}
+  // Branch formats:
+  // 1. Regular: {action}-{tableName}-{slug}-{timestamp}
+  // 2. Fork PR: openkpis-{action}-{tableName}-{slug}-{timestamp}
   const branchName = pr.head.ref;
   const branchParts = branchName.split('-');
 
-  if (branchParts.length < 3) {
+  // Check if this is a fork PR (starts with 'openkpis')
+  const isForkPR = branchParts[0] === 'openkpis';
+  const startIndex = isForkPR ? 1 : 0; // Skip 'openkpis' prefix if present
+
+  if (branchParts.length < startIndex + 3) {
     console.warn(`[GitHub Webhook] Unexpected branch format: ${branchName}`);
     return;
   }
 
-  // Extract table name (second part) and slug (third part onwards, minus timestamp)
-  const tableName = branchParts[1]; // e.g., 'kpis', 'metrics', etc.
-  const slugParts = branchParts.slice(2, -1); // Everything except last (timestamp)
+  // Extract table name and slug
+  // For fork PR: openkpis-{action}-{tableName}-{slug}-{timestamp}
+  // For regular: {action}-{tableName}-{slug}-{timestamp}
+  const tableName = branchParts[startIndex + 1]; // e.g., 'kpis', 'metrics', etc.
+  const slugParts = branchParts.slice(startIndex + 2, -1); // Everything except last (timestamp)
   const slug = slugParts.join('-');
 
   if (!tableName || !slug) {

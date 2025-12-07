@@ -1,45 +1,87 @@
 import React from 'react';
 import Link from 'next/link';
+import '@/app/styles/components.css';
 
 interface SubmitBarProps {
   submitting: boolean;
   submitLabel: string;
   cancelHref: string;
+  // Fork+PR options
+  useForkPR?: boolean;
+  forkPreferenceEnabled?: boolean | null;
+  forkPreferenceLoading?: boolean;
+  onForkPROptionClick?: () => void;
 }
 
-export default function SubmitBar({ submitting, submitLabel, cancelHref }: SubmitBarProps) {
+export default function SubmitBar({ 
+  submitting, 
+  submitLabel, 
+  cancelHref,
+  useForkPR = false,
+  forkPreferenceEnabled = null,
+  forkPreferenceLoading = false,
+  onForkPROptionClick,
+}: SubmitBarProps) {
+  // Show fork option if preference is loaded (backend handles feature flag)
+  const showForkOption = !forkPreferenceLoading;
+  const buttonClass = useForkPR 
+    ? 'submit-button submit-button-success' 
+    : 'submit-button submit-button-primary';
+
   return (
-    <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-      <button
-        type="submit"
-        disabled={submitting}
-        style={{
-          padding: '0.75rem 2rem',
-          backgroundColor: 'var(--ifm-color-primary)',
-          color: 'white',
-          border: 'none',
-          borderRadius: '8px',
-          fontWeight: 500,
-          cursor: submitting ? 'not-allowed' : 'pointer',
-          fontSize: '1rem',
-        }}
-      >
-        {submitting ? 'Please wait…' : submitLabel}
-      </button>
-      <Link
-        href={cancelHref}
-        style={{
-          padding: '0.75rem 2rem',
-          backgroundColor: 'transparent',
-          color: 'var(--ifm-font-color-base)',
-          border: '1px solid var(--ifm-color-emphasis-300)',
-          borderRadius: '8px',
-          textDecoration: 'none',
-          display: 'inline-block',
-        }}
-      >
-        Cancel
-      </Link>
+    <div className="submit-bar">
+      {/* Primary action buttons */}
+      <div className="submit-bar-actions">
+        <button
+          type="submit"
+          disabled={submitting}
+          className={buttonClass}
+        >
+          {submitting 
+            ? 'Please wait…' 
+            : useForkPR 
+              ? 'Create with GitHub Fork + PR' 
+              : submitLabel || 'Quick Create'}
+        </button>
+        <Link
+          href={cancelHref}
+          className="btn"
+        >
+          Cancel
+        </Link>
+      </div>
+
+      {/* Helper text and fork option */}
+      {showForkOption && (
+        <div className={`submit-bar-helper ${useForkPR ? 'submit-bar-helper-success' : ''}`}>
+          {useForkPR ? (
+            <>
+              <p>
+                <strong>✓ GitHub Fork + PR mode enabled</strong>
+              </p>
+              <p className="submit-bar-helper-text">
+                This will create a fork in your GitHub account and open a PR for contribution credit.
+              </p>
+            </>
+          ) : (
+            <>
+              <p>
+                <strong>Quick Create</strong> - No GitHub fork or contribution credit (tracked only in OpenKPIs)
+              </p>
+              {onForkPROptionClick && (
+                <button
+                  type="button"
+                  onClick={onForkPROptionClick}
+                  disabled={submitting}
+                  className="submit-bar-helper-button"
+                >
+                  Advanced: Create with GitHub Fork + PR (for contribution credit)
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
