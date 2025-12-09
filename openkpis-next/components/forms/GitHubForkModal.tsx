@@ -6,20 +6,26 @@ import '@/app/styles/components.css';
 interface GitHubForkModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void;
-  onDontShowAgain: () => void;
+  isProcessing?: boolean;
+  progress?: number; // 0-100 for progress bar
 }
 
 export default function GitHubForkModal({
   isOpen,
   onClose,
-  onConfirm,
-  onDontShowAgain,
+  isProcessing = false,
+  progress = 0,
 }: GitHubForkModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div 
+      className="modal-overlay" 
+      role="dialog" 
+      aria-modal="true" 
+      aria-labelledby="modal-title"
+      onClick={isProcessing ? undefined : onClose}
+    >
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <h2 id="modal-title" className="modal-title">
           Create with GitHub Fork + PR
@@ -45,30 +51,23 @@ export default function GitHubForkModal({
               <strong>Note:</strong> The fork will be a full copy of the repository. This is the standard open-source contribution workflow.
             </p>
           </div>
-        </div>
 
-        <div className="modal-actions">
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="modal-button modal-button-primary"
-          >
-            Enable & Create
-          </button>
-          <button
-            type="button"
-            onClick={onDontShowAgain}
-            className="modal-button modal-button-secondary"
-          >
-            Enable & Don&apos;t Show Again
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="modal-button modal-button-muted"
-          >
-            Cancel
-          </button>
+          {isProcessing && (
+            <div className="modal-progress">
+              <div className="modal-progress-bar-container">
+                <div 
+                  className="modal-progress-bar" 
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="modal-progress-text">
+                {progress < 30 && 'Creating fork...'}
+                {progress >= 30 && progress < 60 && 'Committing changes...'}
+                {progress >= 60 && progress < 90 && 'Opening Pull Request...'}
+                {progress >= 90 && 'Almost done...'}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

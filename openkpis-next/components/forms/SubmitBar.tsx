@@ -29,7 +29,19 @@ export default function SubmitBar({
     <div className="submit-bar">
       {/* Primary action buttons */}
       <div className="submit-bar-actions">
-        {/* Quick Create Button */}
+        {/* Fork + Create Button (Preferred) - First */}
+        {canShowFork && onForkCreate && (
+          <button
+            type="button"
+            onClick={onForkCreate}
+            disabled={submitting}
+            className="submit-button submit-button-success"
+          >
+            {submitting ? 'Please wait…' : 'Fork & Create (Preferred)'}
+          </button>
+        )}
+        
+        {/* Quick Create Button - Second */}
         <button
           type="button"
           onClick={onQuickCreate}
@@ -38,18 +50,6 @@ export default function SubmitBar({
         >
           {submitting ? 'Please wait…' : submitLabel || 'Quick Create'}
         </button>
-        
-        {/* Fork + Create Button (if enabled) */}
-        {canShowFork && onForkCreate && (
-          <button
-            type="button"
-            onClick={onForkCreate}
-            disabled={submitting}
-            className="submit-button submit-button-success"
-          >
-            {submitting ? 'Please wait…' : 'Fork + Create'}
-          </button>
-        )}
         
         <Link
           href={cancelHref}

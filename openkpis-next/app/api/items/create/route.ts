@@ -330,17 +330,19 @@ export async function POST(request: NextRequest) {
           console.error('GitHub sync failed:', syncResult.error);
         }
         
-        // If reauth is required, return early with proper status
-        if (syncResult.requiresReauth) {
+        // If reauth is required for fork+PR, return early with proper status
+        // For fork+PR, this is critical - user explicitly chose this mode
+        if (syncResult.requiresReauth && contributionMode === 'fork_pr') {
           return NextResponse.json(
             {
               success: false,
-              error: syncResult.error || 'GitHub authorization required',
+              error: syncResult.error || 'GitHub authorization expired. Please sign in again to use Fork + Create.',
               requiresReauth: true,
             },
             { status: 401 }
           );
         }
+        // For internal_app, reauth is less critical - item is still created
       }
     } catch (githubErr) {
       console.error('Exception during GitHub sync:', githubErr);

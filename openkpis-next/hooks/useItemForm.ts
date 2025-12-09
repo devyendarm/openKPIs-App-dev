@@ -40,6 +40,7 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
   const [error, setError] = useState<string | null>(null);
   const [forkPreferenceEnabled, setForkPreferenceEnabled] = useState<boolean | null>(null);
   const [showForkModal, setShowForkModal] = useState(false);
+  const [forkProgress, setForkProgress] = useState(0);
   const [forkPreferenceLoading, setForkPreferenceLoading] = useState(true);
 
   const [formData, setFormData] = useState<BaseItemFormData>({
@@ -119,9 +120,19 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
 
     setSaving(true);
     setError(null);
+    
+    // If fork+PR mode, show progress
+    if (githubContributionMode === 'fork_pr') {
+      setForkProgress(10);
+    }
 
     try {
       const slug = formData.slug || generateSlug(formData.name);
+      
+      // Simulate progress for fork+PR (since we can't track actual GitHub API progress)
+      if (githubContributionMode === 'fork_pr') {
+        setForkProgress(20); // Item creation started
+      }
 
       // Call unified API route that handles:
       // 1. Item creation
@@ -144,31 +155,73 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
           githubContributionMode, // Pass the mode explicitly
         }),
       });
+      
+      if (githubContributionMode === 'fork_pr') {
+        setForkProgress(40); // API call in progress
+      }
 
       const data = await response.json();
+      
+      if (githubContributionMode === 'fork_pr') {
+        setForkProgress(60); // Response received
+      }
 
       if (!response.ok) {
         // Handle API errors
         const errorMessage = data.error || `Failed to create ${type}. Status: ${response.status}`;
         setError(errorMessage);
         setSaving(false);
+        setShowForkModal(false);
+        setForkProgress(0);
         return;
       }
 
       if (!data.success || !data.item) {
         setError('Item was created but response was invalid. Please refresh and check.');
         setSaving(false);
+        if (githubContributionMode === 'fork_pr') {
+          setShowForkModal(false);
+          setForkProgress(0);
+        }
         return;
       }
 
-      // Log GitHub sync status (non-blocking)
-      if (data.github && !data.github.success) {
-        console.warn('GitHub sync failed (non-critical):', data.github.error);
-        // Don't show error to user - item was created successfully
+      if (githubContributionMode === 'fork_pr') {
+        setForkProgress(80); // Item created, GitHub sync in progress
+      }
+
+      // Log GitHub sync status
+      if (data.github) {
+        if (data.github.success) {
+          if (githubContributionMode === 'fork_pr') {
+            setForkProgress(95); // GitHub sync successful
+          }
+        } else {
+          // GitHub sync failed
+          if (githubContributionMode === 'fork_pr') {
+            // For fork+PR, show error since user explicitly chose this mode
+            const githubError = data.github.error || 'GitHub sync failed';
+            setError(`Item created successfully, but ${githubError}. You can view it in the editor.`);
+            setForkProgress(0);
+            setShowForkModal(false);
+            setSaving(false);
+            return; // Don't redirect - let user see the error
+          } else {
+            // For Quick Create, GitHub sync failure is non-critical
+            console.warn('GitHub sync failed (non-critical):', data.github.error);
+          }
+        }
       }
 
       // Reset saving state
       setSaving(false);
+      
+      if (githubContributionMode === 'fork_pr') {
+        setForkProgress(100); // Complete
+        // Wait a moment to show 100% before redirecting
+        await new Promise(resolve => setTimeout(resolve, 500));
+        setShowForkModal(false);
+      }
 
       // Use window.location.href for full page reload to ensure clean state
       // This avoids race conditions with router.push()
@@ -182,6 +235,10 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
       const message = error instanceof Error ? error.message : 'Failed to create item.';
       setError(message);
       setSaving(false);
+      if (githubContributionMode === 'fork_pr') {
+        setShowForkModal(false);
+        setForkProgress(0);
+      }
     }
   }, [formData, user, type, afterCreateRedirect]);
 
@@ -191,15 +248,15 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
   }, [submitItem]);
 
   // Handle Fork + Create (fork+PR mode)
+  // Immediately start the fork+PR flow, show modal with progress
   const handleForkCreate = useCallback(() => {
-    // If preference not enabled, show modal first
-    if (forkPreferenceEnabled === false || forkPreferenceEnabled === null) {
-      setShowForkModal(true);
-    } else {
-      // Preference enabled, proceed with fork+PR
-      submitItem('fork_pr');
-    }
-  }, [submitItem, forkPreferenceEnabled]);
+    // Show modal with progress immediately
+    setShowForkModal(true);
+    setSaving(true);
+    
+    // Start fork+PR flow immediately (don't wait for preference)
+    submitItem('fork_pr');
+  }, [submitItem]);
 
   // Handle form submit (for Enter key, defaults to Quick Create)
   const handleSubmit = useCallback((event: React.FormEvent<HTMLFormElement>) => {
@@ -207,38 +264,11 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
     handleQuickCreate();
   }, [handleQuickCreate]);
 
-  // Handle modal confirm (when user enables fork preference)
-  const handleForkModalConfirmAfterEnable = useCallback(async (dontShowAgain: boolean) => {
-    try {
-      const response = await fetch('/api/user/settings/github-contributions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ enabled: true }),
-      });
-
-      if (response.ok) {
-        setForkPreferenceEnabled(true);
-        setShowForkModal(false);
-        
-        // Store "don't show again" in localStorage if requested
-        if (dontShowAgain) {
-          localStorage.setItem('openkpis_fork_modal_dismissed', 'true');
-        }
-        
-        // After enabling preference, proceed with fork+PR creation
-        submitItem('fork_pr');
-      } else {
-        const data = await response.json();
-        setError(data.error || 'Failed to enable GitHub contributions');
-      }
-    } catch (error) {
-      console.error('Failed to enable GitHub fork contributions:', error);
-      setError('Failed to enable GitHub contributions. Please try again.');
-    }
-  }, [submitItem]);
+  // This function is no longer needed - we start fork+PR immediately
+  // Keeping for backward compatibility but it won't be called
+  const handleForkModalConfirmAfterEnable = useCallback(() => {
+    // No-op - fork+PR starts immediately when button is clicked
+  }, []);
 
   return {
     user,
@@ -259,6 +289,7 @@ export function useItemForm({ type, initial, afterCreateRedirect }: UseItemFormO
     forkPreferenceLoading,
     showForkModal,
     setShowForkModal,
+    forkProgress,
     handleForkModalConfirm: handleForkModalConfirmAfterEnable,
   };
 }

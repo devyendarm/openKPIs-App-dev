@@ -26,11 +26,10 @@ export default function NewMetricPage() {
     handleSubmit,
     handleQuickCreate,
     handleForkCreate,
-    forkPreferenceEnabled,
     forkPreferenceLoading,
     showForkModal,
     setShowForkModal,
-    handleForkModalConfirm,
+    forkProgress,
   } = useItemForm({
     type: 'metric',
     afterCreateRedirect: ({ slug }) => `/metrics/${slug}/edit`,
@@ -161,8 +160,8 @@ export default function NewMetricPage() {
       <GitHubForkModal
         isOpen={showForkModal}
         onClose={() => setShowForkModal(false)}
-        onConfirm={() => handleForkModalConfirm(false)}
-        onDontShowAgain={() => handleForkModalConfirm(true)}
+        isProcessing={saving}
+        progress={forkProgress}
       />
     </main>
   );

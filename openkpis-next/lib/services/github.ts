@@ -513,6 +513,7 @@ async function getUserContributionMode(userId: string): Promise<GitHubContributi
   // Check if fork mode is enabled via feature flag
   const forkModeEnabled = process.env.GITHUB_FORK_MODE_ENABLED === 'true';
   if (!forkModeEnabled) {
+    console.log('[GitHub Sync] Fork mode disabled via feature flag, using internal_app');
     return 'internal_app';
   }
 
@@ -831,28 +832,69 @@ export async function syncToGitHub(params: GitHubSyncParams): Promise<{
       console.log('[GitHub Sync] Determined contribution mode:', mode);
     }
 
-    // PRIORITY 1: Fork+PR mode (if enabled and user has token)
+    // PRIORITY 1: Fork+PR mode (if explicitly requested or user preference enabled)
     if (mode === 'fork_pr' && params.userId) {
       console.log('[GitHub Sync] Using fork+PR mode for user contributions');
+      
+      // If mode was explicitly provided, bypass feature flag check
+      // This allows users to use fork+PR even if feature flag is off
+      const forkModeEnabled = process.env.GITHUB_FORK_MODE_ENABLED === 'true';
+      if (!forkModeEnabled && !params.mode) {
+        // Only enforce feature flag if mode wasn't explicitly provided
+        console.warn('[GitHub Sync] Fork mode disabled via feature flag, but mode was explicitly requested - proceeding anyway');
+      }
+      
       const { token: userToken, requiresReauth, error: tokenError } = 
         await getUserOAuthTokenWithRefresh(params.userId);
       
-      if (userToken && params.userEmail) {
-        try {
-          const result = await syncViaForkAndPR(userToken, params);
-          return { ...result, mode: 'fork_pr' };
-        } catch (error) {
-          const err = error as { message?: string; status?: number };
-          console.error('[GitHub Sync] Fork+PR failed, falling back to internal_app:', error);
-          
-          // Fallback to internal_app if fork+PR fails
-          // Don't block the operation - user still gets their KPI created
-          mode = 'internal_app';
-          // Continue to internal_app flow below
-        }
-      } else {
-        console.warn('[GitHub Sync] Fork+PR mode requested but token/email missing, falling back to internal_app');
-        mode = 'internal_app';
+      // Check for reauth requirement first
+      if (requiresReauth) {
+        console.error('[GitHub Sync] Fork+PR requires re-authentication');
+        return {
+          success: false,
+          error: 'GitHub authorization expired. Please sign in again to use Fork + Create.',
+          requiresReauth: true,
+          mode: 'fork_pr',
+        };
+      }
+      
+      // Check for token availability
+      if (!userToken) {
+        console.error('[GitHub Sync] Fork+PR mode requested but user token unavailable:', tokenError);
+        return {
+          success: false,
+          error: tokenError || 'GitHub authorization required. Please sign in with GitHub to use Fork + Create.',
+          requiresReauth: true,
+          mode: 'fork_pr',
+        };
+      }
+      
+      // Check for email availability
+      if (!params.userEmail) {
+        console.error('[GitHub Sync] Fork+PR mode requested but user email unavailable');
+        return {
+          success: false,
+          error: 'Verified GitHub email required for Fork + Create. Please ensure your GitHub account has a verified email address.',
+          mode: 'fork_pr',
+        };
+      }
+      
+      // Execute fork+PR workflow
+      try {
+        const result = await syncViaForkAndPR(userToken, params);
+        console.log('[GitHub Sync] Fork+PR workflow completed:', result.success ? 'success' : 'partial failure');
+        return { ...result, mode: 'fork_pr' };
+      } catch (error) {
+        const err = error as { message?: string; status?: number };
+        console.error('[GitHub Sync] Fork+PR workflow failed:', error);
+        
+        // Return error instead of falling back - user explicitly chose fork+PR
+        // Item is still created in Supabase, but GitHub sync failed
+        return {
+          success: false,
+          error: err.message || 'Failed to create fork and PR. The item was created, but GitHub sync failed. Please try again or use Quick Create.',
+          mode: 'fork_pr',
+        };
       }
     }
 

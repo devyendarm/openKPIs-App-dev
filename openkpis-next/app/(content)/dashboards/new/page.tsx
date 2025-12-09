@@ -26,11 +26,10 @@ export default function NewDashboardPage() {
     handleSubmit,
     handleQuickCreate,
     handleForkCreate,
-    forkPreferenceEnabled,
     forkPreferenceLoading,
     showForkModal,
     setShowForkModal,
-    handleForkModalConfirm,
+    forkProgress,
   } = useItemForm({
     type: 'dashboard',
     afterCreateRedirect: ({ slug }) => `/dashboards/${slug}/edit`,
@@ -153,8 +152,8 @@ export default function NewDashboardPage() {
       <GitHubForkModal
         isOpen={showForkModal}
         onClose={() => setShowForkModal(false)}
-        onConfirm={() => handleForkModalConfirm(false)}
-        onDontShowAgain={() => handleForkModalConfirm(true)}
+        isProcessing={saving}
+        progress={forkProgress}
       />
     </main>
   );
